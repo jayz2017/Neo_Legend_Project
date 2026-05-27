@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from neo_legend.models import RenderRequest, RenderResult
-from neo_legend.skills._plotting import add_canvas, cmap_color, create_figure, save_png
-from neo_legend.skills.base import BaseLegendSkill, StyleDefinition
+from neo_legend._plotting import add_canvas, cmap_color, create_figure, save_png
+from neo_legend.base import BaseLegendSkill, StyleDefinition
 
 
 class RoseSkill(BaseLegendSkill):

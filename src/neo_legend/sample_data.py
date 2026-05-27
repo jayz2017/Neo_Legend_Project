@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from neo_legend.models import RenderRequest
-from neo_legend.skills.base import BaseLegendSkill
+from neo_legend.base import BaseLegendSkill
 
 
 def build_sample_request(skill: BaseLegendSkill, style: str) -> RenderRequest:
@@ -56,8 +56,60 @@ def sample_data_for(legend_type: str, style: str) -> dict[str, Any]:
             ]
         }
     if normalized == "court_shot_animation":
-        return {"shot_count": 430, "seed": 31, "frame_count": 10}
+        frame_count = 14 if style == "arena_arc" else 10
+        return {"shot_count": 430, "seed": 31, "frame_count": frame_count}
     if normalized == "court_shot":
+        if style == "points_location":
+            return {
+                "seed": 2021,
+                "max_points": 800,
+                "scoring_zones": [
+                    {
+                        "name": "rim",
+                        "center": [0, 58],
+                        "spread": [36, 28],
+                        "count": 900,
+                        "points_per_event": 8.8,
+                    },
+                    {
+                        "name": "paint",
+                        "center": [0, 142],
+                        "spread": [24, 56],
+                        "count": 430,
+                        "points_per_event": 6.2,
+                    },
+                    {
+                        "name": "above_break_three",
+                        "shape": "arc",
+                        "angle_range": [25, 155],
+                        "radius": 235,
+                        "radius_sd": 12,
+                        "count": 760,
+                        "points_per_event": 3.7,
+                    },
+                    {
+                        "name": "left_corner",
+                        "center": [-222, 96],
+                        "spread": [8, 42],
+                        "count": 170,
+                        "points_per_event": 3.2,
+                    },
+                    {
+                        "name": "right_corner",
+                        "center": [222, 96],
+                        "spread": [8, 42],
+                        "count": 170,
+                        "points_per_event": 3.2,
+                    },
+                    {
+                        "name": "short_midrange",
+                        "center": [0, 215],
+                        "spread": [52, 28],
+                        "count": 130,
+                        "points_per_event": 2.4,
+                    },
+                ],
+            }
         return {"shot_count": 620, "seed": 11}
     return {}
 
@@ -77,6 +129,14 @@ def summarize_sample_data(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sample_title(legend_type: str, style: str) -> str:
+    style_titles = {
+        ("court_shot_animation", "arena_arc"): "CAITLIN CLARK",
+        ("court_shot", "points_location"): "Total Points By Location",
+        ("court_shot", "kobe_shots"): "Kobe Bryant",
+    }
+    if (legend_type, style) in style_titles:
+        return style_titles[(legend_type, style)]
+
     titles = {
         "court_shot": "Scottie Pippen",
         "dual_court_shot": "Jaden McDaniels",
@@ -92,6 +152,14 @@ def _sample_title(legend_type: str, style: str) -> str:
 
 
 def _sample_subtitle(legend_type: str, style: str) -> str:
+    style_subtitles = {
+        ("court_shot_animation", "arena_arc"): "MOST POINTS IN NCAA WOMEN'S BASKETBALL HISTORY",
+        ("court_shot", "points_location"): "2020-21 Season | By @KirkGoldsberry",
+        ("court_shot", "kobe_shots"): "January 22, 2006 | 81 Points Scored | 5 Points Assisted",
+    }
+    if (legend_type, style) in style_subtitles:
+        return style_subtitles[(legend_type, style)]
+
     subtitles = {
         "court_shot": "1997-98 Shooting Terrain",
         "dual_court_shot": "Minnesota Timberwolves / Year Over Year",

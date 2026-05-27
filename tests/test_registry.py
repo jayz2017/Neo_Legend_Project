@@ -17,6 +17,13 @@ def test_registry_lists_all_readme_legend_types(registry) -> None:
         "plus_minus_coordinate",
         "rose",
         "table",
+        "points_location",
+        "radar_chart",
+        "dual_radar_chart",
+        "bar_chart",
+        "combo_chart",
+        "bubble_chart",
+        "sankey_chart",
     }
 
 

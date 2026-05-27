@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: run-tests
+        name: Run Test Suite
+        entry: pytest tests/ -q --tb=short
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]  # 仅在推送前运行测试

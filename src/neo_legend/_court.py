@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Rectangle
 import numpy as np
 
-from neo_legend.skills._plotting import seeded_rng
+from neo_legend._plotting import seeded_rng
 
 
 def draw_half_court(

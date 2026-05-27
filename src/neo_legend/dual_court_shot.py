@@ -7,9 +7,9 @@ from typing import Any
 import numpy as np
 
 from neo_legend.models import RenderRequest, RenderResult
-from neo_legend.skills._court import draw_half_court, sample_shots
-from neo_legend.skills._plotting import add_canvas, create_figure, make_gradient, save_png
-from neo_legend.skills.base import BaseLegendSkill, StyleDefinition
+from neo_legend._court import draw_half_court, sample_shots
+from neo_legend._plotting import add_canvas, create_figure, make_gradient, save_png
+from neo_legend.base import BaseLegendSkill, StyleDefinition
 
 
 class DualCourtShotSkill(BaseLegendSkill):
