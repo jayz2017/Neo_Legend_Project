@@ -7,8 +7,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageEnhance, ImageSequence
 import numpy as np
+from PIL import Image, ImageEnhance, ImageSequence
 
 
 @dataclass(frozen=True)
@@ -172,13 +172,15 @@ def reference_paths_for_style(
 
     requested_refs: list[str] = []
     fallback_refs: list[str] = []
+    matched_style = False
     for style in styles:
         refs = list(style.get("reference_images") or [])
         if style.get("name") == style_name:
+            matched_style = True
             requested_refs.extend(refs)
         fallback_refs.extend(refs)
 
-    refs = requested_refs or fallback_refs
+    refs = requested_refs if matched_style else fallback_refs
     return [project_root / ref for ref in refs]
 
 

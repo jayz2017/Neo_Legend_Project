@@ -27,3 +27,6 @@ def test_generate_all_writes_images_logs_and_reports(tmp_path) -> None:
     assert {"request", "data_summary", "initial_comparison", "final_comparison", "tuning"} <= set(
         first_event
     )
+    themed_events = [json.loads(line) for line in lines if '"_resolved_luxury_theme"' in line]
+    assert themed_events
+    assert any(event["tuning"]["reason"] == "luxury_theme_preserved" for event in themed_events)

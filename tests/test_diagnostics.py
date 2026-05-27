@@ -5,6 +5,7 @@ from pathlib import Path
 from neo_legend.diagnostics import (
     compare_to_references,
     image_metrics_from_bytes,
+    reference_paths_for_style,
     tune_content_to_reference,
 )
 from neo_legend.models import RenderRequest
@@ -33,3 +34,16 @@ def test_metrics_comparison_and_tuning_pipeline(registry, tmp_path) -> None:
     assert tuned_metrics.width == 720
     assert tuned_metrics.height == 900
     assert "applied" in tuning
+
+
+def test_reference_paths_do_not_fallback_for_known_style_without_refs() -> None:
+    refs = reference_paths_for_style(
+        project_root=Path.cwd(),
+        styles=[
+            {"name": "with_refs", "reference_images": ["a.png"]},
+            {"name": "no_refs", "reference_images": []},
+        ],
+        style_name="no_refs",
+    )
+
+    assert refs == []

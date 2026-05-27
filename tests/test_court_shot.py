@@ -147,6 +147,25 @@ def test_default_style_when_none_provided(registry):
     assert result.style == "terrain"
 
 
+def test_kobe_shots_style_renders_valid_png(registry):
+    """测试 kobe_shots 样式渲染成功且图片有效"""
+    request = RenderRequest(legend_type="court_shot", style="kobe_shots", width=720, height=900)
+    result = registry.render(request)
+
+    image = Image.open(BytesIO(result.content))
+    assert result.media_type == "image/png"
+    assert image.size == (720, 900)
+    assert image.format == "PNG"
+
+
+def test_kobe_shots_produces_different_output_from_terrain(registry):
+    """测试 kobe_shots 样式与 terrain 样式输出不同"""
+    kobe = registry.render(RenderRequest(legend_type="court_shot", style="kobe_shots", width=720, height=900))
+    terrain = registry.render(RenderRequest(legend_type="court_shot", style="terrain", width=720, height=900))
+
+    assert kobe.content != terrain.content
+
+
 def _mean_luma(image: Image.Image, box: tuple[int, int, int, int]) -> float:
     crop = image.crop(box)
     pixels = list(crop.getdata())

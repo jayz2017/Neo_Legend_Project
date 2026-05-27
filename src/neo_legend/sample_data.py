@@ -4,23 +4,31 @@ from __future__ import annotations
 
 from typing import Any
 
-from neo_legend.models import RenderRequest
 from neo_legend.base import BaseLegendSkill
+from neo_legend.models import RenderRequest
 
 
 def build_sample_request(skill: BaseLegendSkill, style: str) -> RenderRequest:
     """Create a deterministic render request for a legend skill/style pair."""
 
-    width, height = skill.default_size
+    width, height = _sample_size(skill, style)
+    data = sample_data_for(skill.legend_type, style)
+    data.setdefault("luxury_theme", "random")
     return RenderRequest(
         legend_type=skill.legend_type,
         style=style,
         title=_sample_title(skill.legend_type, style),
         subtitle=_sample_subtitle(skill.legend_type, style),
-        data=sample_data_for(skill.legend_type, style),
+        data=data,
         width=width,
         height=height,
     )
+
+
+def _sample_size(skill: BaseLegendSkill, style: str) -> tuple[int, int]:
+    if skill.legend_type == "table" and style == "league_standings_gradient":
+        return 1245, 680
+    return skill.default_size
 
 
 def sample_data_for(legend_type: str, style: str) -> dict[str, Any]:
@@ -37,6 +45,8 @@ def sample_data_for(legend_type: str, style: str) -> dict[str, Any]:
             "proposed_values": [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5],
         }
     if normalized == "table":
+        if style == "league_standings_gradient":
+            return _league_standings_table_data()
         return {"rows": _table_rows()}
     if normalized == "dual_court_shot":
         return {
@@ -133,6 +143,7 @@ def _sample_title(legend_type: str, style: str) -> str:
         ("court_shot_animation", "arena_arc"): "CAITLIN CLARK",
         ("court_shot", "points_location"): "Total Points By Location",
         ("court_shot", "kobe_shots"): "Kobe Bryant",
+        ("table", "league_standings_gradient"): "League Standings",
     }
     if (legend_type, style) in style_titles:
         return style_titles[(legend_type, style)]
@@ -156,6 +167,7 @@ def _sample_subtitle(legend_type: str, style: str) -> str:
         ("court_shot_animation", "arena_arc"): "MOST POINTS IN NCAA WOMEN'S BASKETBALL HISTORY",
         ("court_shot", "points_location"): "2020-21 Season | By @KirkGoldsberry",
         ("court_shot", "kobe_shots"): "January 22, 2006 | 81 Points Scored | 5 Points Assisted",
+        ("table", "league_standings_gradient"): "Average-centered gradient columns",
     }
     if (legend_type, style) in style_subtitles:
         return style_subtitles[(legend_type, style)]
@@ -256,3 +268,147 @@ def _table_row(
         "ast_tov": ast_tov,
         "mpg": mpg,
     }
+
+
+def _league_standings_table_data() -> dict[str, Any]:
+    return {
+        "color_theme": "random",
+        "header_height": 0.11,
+        "columns": [
+            {"key": "rank", "label": "排名", "width": 0.055, "format": "int"},
+            {"key": "team", "label": "球队", "width": 0.140, "align": "center", "bold": True},
+            {"key": "wins", "label": "胜场", "width": 0.045, "format": "int", "average_format": ".1f"},
+            {"key": "losses", "label": "负场", "width": 0.045, "format": "int", "average_format": ".1f"},
+            {"key": "net_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "net_rating", "label": "", "width": 0.055, "format": ".1f"},
+            {"key": "off_rating_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "off_rating", "label": "", "width": 0.055, "format": ".1f"},
+            {"key": "efg_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "efg", "label": "", "width": 0.060, "format": "{value:.1f}%"},
+            {"key": "turnover_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "turnover_rate", "label": "", "width": 0.055, "format": "{value:.1f}%"},
+            {"key": "orb_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "orb_rate", "label": "", "width": 0.060, "format": "{value:.1f}%"},
+            {"key": "ft_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "ft_rate", "label": "", "width": 0.055, "format": "{value:.1f}%"},
+            {"key": "def_rating_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "def_rating", "label": "", "width": 0.055, "format": ".1f"},
+            {"key": "opp_efg_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "opp_efg", "label": "", "width": 0.060, "format": "{value:.1f}%"},
+            {"key": "def_turnover_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "def_turnover_rate", "label": "", "width": 0.055, "format": "{value:.1f}%"},
+            {"key": "opp_orb_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "opp_orb_rate", "label": "", "width": 0.060, "format": "{value:.1f}%"},
+            {"key": "foul_rank", "label": "", "width": 0.040, "format": "int"},
+            {"key": "foul_rate", "label": "", "width": 0.055, "format": "{value:.1f}%"},
+        ],
+        "header_groups": [
+            {"label": "百回合净胜分", "columns": ["net_rank", "net_rating"], "show_children": False},
+            {
+                "label": "进攻",
+                "columns": [
+                    "off_rating_rank",
+                    "off_rating",
+                    "efg_rank",
+                    "efg",
+                    "turnover_rank",
+                    "turnover_rate",
+                    "orb_rank",
+                    "orb_rate",
+                    "ft_rank",
+                    "ft_rate",
+                ],
+                "children": [
+                    {"label": "百回合得分", "columns": ["off_rating_rank", "off_rating"]},
+                    {"label": "有效命中率", "columns": ["efg_rank", "efg"]},
+                    {"label": "失误率", "columns": ["turnover_rank", "turnover_rate"]},
+                    {"label": "进攻篮板率", "columns": ["orb_rank", "orb_rate"]},
+                    {"label": "罚球率", "columns": ["ft_rank", "ft_rate"]},
+                ],
+            },
+            {
+                "label": "防守",
+                "columns": [
+                    "def_rating_rank",
+                    "def_rating",
+                    "opp_efg_rank",
+                    "opp_efg",
+                    "def_turnover_rank",
+                    "def_turnover_rate",
+                    "opp_orb_rank",
+                    "opp_orb_rate",
+                    "foul_rank",
+                    "foul_rate",
+                ],
+                "children": [
+                    {"label": "百回合失分", "columns": ["def_rating_rank", "def_rating"]},
+                    {"label": "有效命中率", "columns": ["opp_efg_rank", "opp_efg"]},
+                    {"label": "失误率", "columns": ["def_turnover_rank", "def_turnover_rate"]},
+                    {"label": "进攻篮板率", "columns": ["opp_orb_rank", "opp_orb_rate"]},
+                    {"label": "罚球率", "columns": ["foul_rank", "foul_rate"]},
+                ],
+            },
+        ],
+        "average_row": {
+            "team": "联盟平均",
+            "wins": 21.0,
+            "losses": 21.0,
+            "net_rating": 0.0,
+            "off_rating": 116.2,
+            "efg": 53.7,
+            "turnover_rate": 16.1,
+            "orb_rate": 31.0,
+            "ft_rate": 25.2,
+            "def_rating": 116.2,
+            "opp_efg": 53.7,
+            "def_turnover_rate": 16.1,
+            "opp_orb_rate": 31.0,
+            "foul_rate": 25.2,
+        },
+        "gradient_columns": {
+            "net_rank": {"midpoint": "mean", "higher_is_better": False},
+            "off_rating_rank": {"midpoint": "mean", "higher_is_better": False},
+            "efg_rank": {"midpoint": "mean", "higher_is_better": False},
+            "turnover_rank": {"midpoint": "mean", "higher_is_better": False},
+            "orb_rank": {"midpoint": "mean", "higher_is_better": False},
+            "ft_rank": {"midpoint": "mean", "higher_is_better": False},
+            "def_rating_rank": {"midpoint": "mean", "higher_is_better": False},
+            "opp_efg_rank": {"midpoint": "mean", "higher_is_better": False},
+            "def_turnover_rank": {"midpoint": "mean", "higher_is_better": False},
+            "opp_orb_rank": {"midpoint": "mean", "higher_is_better": False},
+            "foul_rank": {"midpoint": "mean", "higher_is_better": False},
+        },
+        "rows": [
+            _league_standing_row(1, "上海久事", 38, 4, net_rank=1, net_rating=21.0, off_rating_rank=1, off_rating=126.4, efg_rank=1, efg=60.1, turnover_rank=10, turnover_rate=15.9, orb_rank=4, orb_rate=34.5, ft_rank=17, ft_rate=22.9, def_rating_rank=1, def_rating=105.4, opp_efg_rank=1, opp_efg=49.1, def_turnover_rank=13, def_turnover_rate=15.8, opp_orb_rank=1, opp_orb_rate=26.1, foul_rank=4, foul_rate=20.7),
+            _league_standing_row(2, "浙江浙商证券", 33, 9, net_rank=2, net_rating=12.3, off_rating_rank=5, off_rating=120.1, efg_rank=9, efg=53.7, turnover_rank=6, turnover_rate=15.3, orb_rank=6, orb_rate=33.8, ft_rank=6, ft_rate=27.5, def_rating_rank=2, def_rating=107.9, opp_efg_rank=4, opp_efg=50.8, def_turnover_rank=3, def_turnover_rate=18.0, opp_orb_rank=9, opp_orb_rate=30.1, foul_rank=5, foul_rate=20.8),
+            _league_standing_row(3, "北京北汽", 29, 13, net_rank=3, net_rating=11.0, off_rating_rank=2, off_rating=122.8, efg_rank=3, efg=56.3, turnover_rank=2, turnover_rate=14.8, orb_rank=5, orb_rate=33.9, ft_rank=16, ft_rate=23.0, def_rating_rank=5, def_rating=111.8, opp_efg_rank=6, opp_efg=51.8, def_turnover_rank=16, def_turnover_rate=14.6, opp_orb_rank=2, opp_orb_rate=28.2, foul_rank=2, foul_rate=19.8),
+            _league_standing_row(4, "浙江稠州金租", 27, 15, net_rank=4, net_rating=8.2, off_rating_rank=7, off_rating=118.6, efg_rank=7, efg=53.8, turnover_rank=17, turnover_rate=17.7, orb_rank=3, orb_rate=35.6, ft_rank=13, ft_rate=24.4, def_rating_rank=3, def_rating=110.5, opp_efg_rank=7, opp_efg=52.2, def_turnover_rank=2, def_turnover_rate=18.0, opp_orb_rank=4, opp_orb_rate=29.2, foul_rank=14, foul_rate=27.4),
+            _league_standing_row(5, "广东东阳光", 27, 15, net_rank=5, net_rating=6.5, off_rating_rank=6, off_rating=119.0, efg_rank=10, efg=53.7, turnover_rank=5, turnover_rate=15.1, orb_rank=8, orb_rate=33.1, ft_rank=14, ft_rate=24.4, def_rating_rank=6, def_rating=112.5, opp_efg_rank=8, opp_efg=52.4, def_turnover_rank=4, def_turnover_rate=17.9, opp_orb_rank=13, opp_orb_rate=31.8, foul_rank=15, foul_rate=27.6),
+            _league_standing_row(6, "深圳马可波罗", 30, 12, net_rank=6, net_rating=6.3, off_rating_rank=3, off_rating=121.8, efg_rank=4, efg=56.1, turnover_rank=1, turnover_rate=13.6, orb_rank=14, orb_rate=29.7, ft_rank=15, ft_rate=23.0, def_rating_rank=12, def_rating=115.5, opp_efg_rank=14, opp_efg=54.5, def_turnover_rank=6, def_turnover_rate=17.2, opp_orb_rank=10, opp_orb_rate=30.7, foul_rank=8, foul_rate=24.9),
+            _league_standing_row(7, "青岛崂山啤酒", 25, 17, net_rank=7, net_rating=4.4, off_rating_rank=13, off_rating=115.5, efg_rank=12, efg=53.5, turnover_rank=7, turnover_rate=15.5, orb_rank=17, orb_rate=28.0, ft_rank=8, ft_rate=26.2, def_rating_rank=4, def_rating=111.2, opp_efg_rank=2, opp_efg=50.4, def_turnover_rank=12, def_turnover_rate=15.9, opp_orb_rank=11, opp_orb_rate=31.5, foul_rank=9, foul_rate=25.0),
+            _league_standing_row(8, "山东高速", 24, 18, net_rank=8, net_rating=4.0, off_rating_rank=8, off_rating=118.3, efg_rank=19, efg=51.4, turnover_rank=11, turnover_rate=16.1, orb_rank=1, orb_rate=36.2, ft_rank=2, ft_rate=28.7, def_rating_rank=9, def_rating=114.4, opp_efg_rank=12, opp_efg=54.1, def_turnover_rank=1, def_turnover_rate=18.7, opp_orb_rank=6, opp_orb_rate=29.7, foul_rank=20, foul_rate=32.0),
+            _league_standing_row(9, "山西汾酒", 22, 20, net_rank=9, net_rating=3.1, off_rating_rank=9, off_rating=117.9, efg_rank=6, efg=54.2, turnover_rank=8, turnover_rate=15.6, orb_rank=10, orb_rate=31.8, ft_rank=3, ft_rate=28.2, def_rating_rank=11, def_rating=114.9, opp_efg_rank=11, opp_efg=53.9, def_turnover_rank=5, def_turnover_rate=17.5, opp_orb_rank=12, opp_orb_rate=31.7, foul_rank=12, foul_rate=27.2),
+            _league_standing_row(10, "辽宁本钢", 23, 19, net_rank=10, net_rating=2.3, off_rating_rank=11, off_rating=116.0, efg_rank=15, efg=53.0, turnover_rank=14, turnover_rate=17.2, orb_rank=2, orb_rate=36.1, ft_rank=19, ft_rate=20.9, def_rating_rank=8, def_rating=113.7, opp_efg_rank=10, opp_efg=53.3, def_turnover_rank=9, def_turnover_rate=16.9, opp_orb_rank=3, opp_orb_rate=28.9, foul_rank=13, foul_rate=27.2),
+            _league_standing_row(11, "宁波町渥", 21, 21, net_rank=11, net_rating=2.0, off_rating_rank=15, off_rating=114.8, efg_rank=11, efg=53.5, turnover_rank=19, turnover_rate=17.8, orb_rank=7, orb_rate=33.2, ft_rank=1, ft_rate=28.7, def_rating_rank=7, def_rating=112.8, opp_efg_rank=3, opp_efg=50.7, def_turnover_rank=8, def_turnover_rate=16.9, opp_orb_rank=14, opp_orb_rate=32.1, foul_rank=19, foul_rate=30.3),
+            _league_standing_row(12, "广州朗肽海本", 18, 24, net_rank=12, net_rating=-1.2, off_rating_rank=14, off_rating=115.4, efg_rank=13, efg=53.1, turnover_rank=15, turnover_rate=17.3, orb_rank=9, orb_rate=32.4, ft_rank=9, ft_rate=25.7, def_rating_rank=13, def_rating=116.5, opp_efg_rank=5, opp_efg=51.7, def_turnover_rank=20, def_turnover_rate=13.5, opp_orb_rank=16, opp_orb_rate=32.7, foul_rank=3, foul_rate=20.2),
+            _league_standing_row(13, "新疆伊力特", 14, 28, net_rank=13, net_rating=-1.9, off_rating_rank=17, off_rating=112.9, efg_rank=5, efg=54.6, turnover_rank=20, turnover_rate=18.0, orb_rank=11, orb_rate=31.5, ft_rank=20, ft_rate=20.2, def_rating_rank=10, def_rating=114.8, opp_efg_rank=9, opp_efg=53.3, def_turnover_rank=10, def_turnover_rate=16.4, opp_orb_rank=8, opp_orb_rate=30.0, foul_rank=10, foul_rate=25.7),
+            _league_standing_row(14, "福建晋江文旅", 17, 25, net_rank=14, net_rating=-3.0, off_rating_rank=10, off_rating=116.3, efg_rank=14, efg=53.0, turnover_rank=3, turnover_rate=14.8, orb_rank=15, orb_rate=28.7, ft_rank=5, ft_rate=27.7, def_rating_rank=15, def_rating=119.3, opp_efg_rank=13, opp_efg=54.5, def_turnover_rank=7, def_turnover_rate=17.1, opp_orb_rank=19, opp_orb_rate=34.4, foul_rank=17, foul_rate=28.7),
+        ],
+    }
+
+
+def _league_standing_row(
+    rank: int,
+    team: str,
+    wins: int,
+    losses: int,
+    **metrics: Any,
+) -> dict[str, Any]:
+    row = {
+        "rank": rank,
+        "team": team,
+        "wins": wins,
+        "losses": losses,
+    }
+    row.update(metrics)
+    return row

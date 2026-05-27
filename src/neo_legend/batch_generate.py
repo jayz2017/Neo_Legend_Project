@@ -9,7 +9,6 @@ from typing import Any
 
 from neo_legend.diagnostics import (
     compare_to_references,
-    image_metrics_from_bytes,
     image_metrics_from_path,
     reference_paths_for_style,
     tune_content_to_reference,
@@ -57,12 +56,20 @@ def generate_all(
                 style_name=style.name,
             )
             initial_comparison = compare_to_references(raw_path, reference_paths)
-            tuned_content, tuning = tune_content_to_reference(
-                result.content,
-                result.media_type,
-                initial_comparison.generated_metrics,
-                initial_comparison.reference_metrics,
-            )
+            if request.data.get("_resolved_luxury_theme"):
+                tuned_content = result.content
+                tuning = {
+                    "applied": False,
+                    "reason": "luxury_theme_preserved",
+                    "theme": request.data["_resolved_luxury_theme"],
+                }
+            else:
+                tuned_content, tuning = tune_content_to_reference(
+                    result.content,
+                    result.media_type,
+                    initial_comparison.generated_metrics,
+                    initial_comparison.reference_metrics,
+                )
             final_path.write_bytes(tuned_content)
             final_metrics = image_metrics_from_path(final_path)
             final_comparison = compare_to_references(final_path, reference_paths)

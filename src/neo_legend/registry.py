@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from neo_legend.errors import UnknownLegendTypeError
-from neo_legend.models import LegendTypeInfo, RenderRequest, RenderResult
 from neo_legend.animated_court_shot import AnimatedCourtShotSkill
 from neo_legend.bar_chart import BarChartSkill
 from neo_legend.base import BaseLegendSkill
@@ -15,6 +13,9 @@ from neo_legend.coordinate import CoordinateSkill
 from neo_legend.court_shot import CourtShotSkill
 from neo_legend.dual_court_shot import DualCourtShotSkill
 from neo_legend.dual_radar_chart import DualRadarChartSkill
+from neo_legend.errors import UnknownLegendTypeError
+from neo_legend.luxury_theme import apply_luxury_theme
+from neo_legend.models import LegendTypeInfo, RenderRequest, RenderResult
 from neo_legend.plus_minus_coordinate import PlusMinusCoordinateSkill
 from neo_legend.points_location import PointsLocationSkill
 from neo_legend.radar_chart import RadarChartSkill
@@ -40,7 +41,8 @@ class LegendRegistry:
         return [self._skills[key].metadata() for key in sorted(self._skills)]
 
     def render(self, request: RenderRequest) -> RenderResult:
-        return self.get(request.legend_type).render(request)
+        result = self.get(request.legend_type).render(request)
+        return apply_luxury_theme(result, request.data)
 
 
 def build_default_registry() -> LegendRegistry:

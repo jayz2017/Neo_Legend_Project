@@ -8,15 +8,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyBboxPatch, Polygon
 
-from neo_legend.models import RenderRequest, RenderResult
 from neo_legend._plotting import (
     add_canvas,
     create_figure,
     make_gradient,
     save_png,
-    seeded_rng,
 )
 from neo_legend.base import BaseLegendSkill, StyleDefinition
+from neo_legend.models import RenderRequest, RenderResult
 
 
 class DualRadarChartSkill(BaseLegendSkill):
@@ -102,6 +101,9 @@ class DualRadarChartSkill(BaseLegendSkill):
 
         warm_colors = ["#ff6b6b", "#ff8e53", "#feca57", "#ff9ff3", "#ff6348"]
         cool_colors = ["#54a0ff", "#5f27cd", "#00d2d3", "#48dbfb", "#a29bfe"]
+        n = len(categories)
+        warm_colors = (warm_colors * ((n // len(warm_colors)) + 1))[:n]
+        cool_colors = (cool_colors * ((n // len(cool_colors)) + 1))[:n]
 
         ax_l = fig.add_axes([0.05, 0.12, 0.42, 0.75], polar=True, facecolor=bg)
         ax_r = fig.add_axes([0.53, 0.12, 0.42, 0.75], polar=True, facecolor=bg)
@@ -111,7 +113,7 @@ class DualRadarChartSkill(BaseLegendSkill):
 
         max_diff_idx = int(np.argmax(np.abs(diffs_pct)))
         highlight_idx = -1
-        for i, cat in enumerate(categories):
+        for i, _category in enumerate(categories):
             if abs(diffs_pct[i]) > 10:
                 highlight_idx = i
                 break
@@ -177,20 +179,17 @@ class DualRadarChartSkill(BaseLegendSkill):
 
         left_colors = ["#ff6b6b", "#ee5a24", "#f9ca24", "#eb4d4b", "#e17055"]
         right_colors = ["#4ecdc4", "#6c5ce7", "#00cec9", "#81ecec", "#74b9ff"]
+        left_colors = (left_colors * ((n // len(left_colors)) + 1))[:n]
+        right_colors = (right_colors * ((n // len(right_colors)) + 1))[:n]
 
         ax_l = fig.add_axes([0.04, 0.15, 0.40, 0.68], polar=True, facecolor=bg)
         ax_r = fig.add_axes([0.56, 0.15, 0.40, 0.68], polar=True, facecolor=bg)
 
         angles = np.linspace(0, 2 * np.pi, n, endpoint=False).tolist()
         angles += angles[:1]
-        lv_closed = list(lv) + [lv[0]]
-        rv_closed = list(rv) + [rv[0]]
-
         self._draw_radar_light(ax_l, categories, lv, left_colors, bg, title=left_data["label"])
         self._draw_radar_light(ax_r, categories, rv, right_colors, bg, title=right_data["label"])
 
-        ax_l_pos = ax_l.get_position()
-        ax_r_pos = ax_r.get_position()
         center_ax = fig.add_axes([0.44, 0.30, 0.12, 0.38], facecolor="none")
         center_ax.set_axis_off()
 
@@ -224,7 +223,7 @@ class DualRadarChartSkill(BaseLegendSkill):
         canvas.text(panel_x, panel_y + 0.12, "DIFF SUMMARY", color="#2d3436",
                     fontsize=10, fontweight="black", ha="center")
         canvas.text(panel_x, panel_y + 0.07, "─" * 14, color="#b2bec3", fontsize=8, ha="center")
-        canvas.text(panel_x, panel_y + 0.02, f"MAX GAP:", color="#636e72", fontsize=9, ha="center")
+        canvas.text(panel_x, panel_y + 0.02, "MAX GAP:", color="#636e72", fontsize=9, ha="center")
         canvas.text(panel_x, panel_y - 0.02, categories[max_diff_idx], color="#0984e3",
                     fontsize=12, fontweight="bold", ha="center")
         diff_val = diffs[max_diff_idx]
@@ -272,6 +271,8 @@ class DualRadarChartSkill(BaseLegendSkill):
 
         e_colors = ["#233554", "#2a4365", "#2c5282", "#2b6cb0", "#3182ce"]
         l_colors = ["#00ff88", "#00e676", "#00cc66", "#00b359", "#00994d"]
+        e_colors = (e_colors * ((n // len(e_colors)) + 1))[:n]
+        l_colors = (l_colors * ((n // len(l_colors)) + 1))[:n]
 
         ax_e = fig.add_axes([0.08, 0.50, 0.58, 0.37], polar=True, facecolor=bg)
         ax_l = fig.add_axes([0.08, 0.07, 0.58, 0.37], polar=True, facecolor=bg)
@@ -290,22 +291,26 @@ class DualRadarChartSkill(BaseLegendSkill):
                 theta_range = np.linspace(angles[i], angles[(i + 1) % n], 20)
                 r_vals_e = np.linspace(ev[i] / max(ev.max(), 1e-9), ev[(i + 1) % n] / max(ev.max(), 1e-9), 20)
                 r_vals_l = np.linspace(lv[i] / max(lv.max(), 1e-9), lv[(i + 1) % n] / max(lv.max(), 1e-9), 20)
-                verts_e = list(zip(theta_range, r_vals_e))
-                verts_l = list(zip(theta_range, r_vals_l))
+                verts_e = list(zip(theta_range, r_vals_e, strict=True))
+                verts_l = list(zip(theta_range, r_vals_l, strict=True))
                 poly_e = Polygon(verts_e, closed=False, transform=ax_l.transData + ax_l.transAxes.inverted(),
                                  facecolor="#00ff88", alpha=0.15, edgecolor="none", zorder=1)
                 ax_l.add_patch(poly_e)
             elif changes[i] < 0:
                 theta_range = np.linspace(angles[i], angles[(i + 1) % n], 20)
                 r_vals_l = np.linspace(lv[i] / max(lv.max(), 1e-9), lv[(i + 1) % n] / max(lv.max(), 1e-9), 20)
-                verts_l = list(zip(theta_range, r_vals_l))
+                verts_l = list(zip(theta_range, r_vals_l, strict=True))
                 poly_l = Polygon(verts_l, closed=False, transform=ax_l.transData + ax_l.transAxes.inverted(),
                                  facecolor="#ff4444", alpha=0.15, edgecolor="none", zorder=1)
                 ax_l.add_patch(poly_l)
 
         mid_x = 0.78
-        canvas.annotate("", xy=(mid_x, 0.51), xytext=(mid_x, 0.43),
-                        arrowprops=dict(arrowstyle="-|>", color="#64ffda", lw=3, mutation_scale=20))
+        canvas.annotate(
+            "",
+            xy=(mid_x, 0.51),
+            xytext=(mid_x, 0.43),
+            arrowprops={"arrowstyle": "-|>", "color": "#64ffda", "lw": 3, "mutation_scale": 20},
+        )
         canvas.text(mid_x, 0.47, "EVOLVE", color="#64ffda", fontsize=12, fontweight="bold",
                     ha="center", va="center", rotation=90)
 

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import numpy as np
 import pytest
 from PIL import Image
+
+from neo_legend.animated_court_shot import AnimatedCourtShotSkill
 from neo_legend.models import RenderRequest
 from neo_legend.registry import build_default_registry
 
@@ -34,6 +37,26 @@ def test_sweep_style_returns_gif_format(registry):
 
     image = Image.open(BytesIO(result.content))
     assert image.format == "GIF"
+
+
+def test_sweep_alpha_reveals_data_progressively():
+    early = AnimatedCourtShotSkill._progressive_sweep_alpha(
+        total_count=20,
+        frame_index=1,
+        frame_count=5,
+    )
+    late = AnimatedCourtShotSkill._progressive_sweep_alpha(
+        total_count=20,
+        frame_index=4,
+        frame_count=5,
+    )
+
+    early_visible = int(np.count_nonzero(early > 0))
+    late_visible = int(np.count_nonzero(late > 0))
+
+    assert 0 < early_visible < late_visible
+    assert np.all(late[:early_visible] > 0)
+    assert late_visible == 20
 
 
 def test_gif_contains_multiple_frames(registry):

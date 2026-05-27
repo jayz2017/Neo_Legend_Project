@@ -21,6 +21,14 @@ def test_legend_types_endpoint(client) -> None:
     assert "table" in legend_types
 
 
+def test_luxury_themes_endpoint(client) -> None:
+    response = client.get("/luxury-themes")
+
+    assert response.status_code == 200
+    themes = response.json()
+    assert any(theme["name"] == "obsidian_gold" for theme in themes)
+
+
 def test_get_render_uses_type_and_style_params(client) -> None:
     response = client.get(
         "/render",
@@ -33,6 +41,24 @@ def test_get_render_uses_type_and_style_params(client) -> None:
     assert response.headers["x-legend-style"] == "gold_scorers"
     image = Image.open(BytesIO(response.content))
     assert image.size == (700, 800)
+
+
+def test_get_render_accepts_luxury_theme_params(client) -> None:
+    response = client.get(
+        "/render",
+        params={
+            "legend_type": "coordinate",
+            "style": "gold_scorers",
+            "width": 700,
+            "height": 800,
+            "luxury_theme": "sapphire_platinum",
+            "luxury_theme_intensity": 0.6,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert Image.open(BytesIO(response.content)).format == "PNG"
 
 
 def test_post_render_accepts_custom_payload(client) -> None:
@@ -100,6 +126,7 @@ def test_render_points_location_via_api(client):
     assert response.headers["x-legend-type"] == "points_location"
 
     from io import BytesIO
+
     from PIL import Image
     image = Image.open(BytesIO(response.content))
     assert image.format == "PNG"
@@ -107,7 +134,6 @@ def test_render_points_location_via_api(client):
 
 def test_post_render_with_large_custom_data(client):
     """测试 POST /render 携带大量自定义数据"""
-    import json
 
     payload = {
         "legend_type": "table",
@@ -176,3 +202,87 @@ def test_legend_types_includes_new_types(client):
     new_types = ["radar_chart", "dual_radar_chart", "bar_chart", "combo_chart", "bubble_chart", "sankey_chart"]
     for t in new_types:
         assert t in types
+
+
+# ==================== Luxury Theme 集成测试 ====================
+
+def test_get_render_luxury_theme_seed_reproducibility(client):
+    """测试使用 luxury_theme_seed 参数的可复现性：相同 seed 返回相同图片"""
+    params = {
+        "legend_type": "coordinate",
+        "style": "gold_scorers",
+        "width": 700,
+        "height": 800,
+        "luxury_theme": "random",
+        "luxury_theme_seed": "reproducible_test_42",
+    }
+
+    response1 = client.get("/render", params=params)
+    response2 = client.get("/render", params=params)
+
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert response1.content == response2.content, "相同 seed 应产生相同的渲染结果"
+
+
+def test_get_render_luxury_theme_intensity_minimal(client):
+    """测试 luxury_theme_intensity=0.0 时效果比 intensity=2.0 弱（使用较大差异）"""
+    import hashlib
+
+    base_params = {
+        "legend_type": "coordinate",
+        "style": "gold_scorers",
+        "width": 700,
+        "height": 800,
+        "luxury_theme": "obsidian_gold",
+    }
+
+    response_intensity_zero = client.get("/render", params={
+        **base_params,
+        "luxury_theme_intensity": 0.0,
+    })
+    response_intensity_max = client.get("/render", params={
+        **base_params,
+        "luxury_theme_intensity": 2.0,
+    })
+
+    assert response_intensity_zero.status_code == 200
+    assert response_intensity_max.status_code == 200
+
+    zero_hash = hashlib.md5(response_intensity_zero.content).hexdigest()
+    max_hash = hashlib.md5(response_intensity_max.content).hexdigest()
+
+    assert zero_hash != max_hash, "intensity=0.0 和 2.0 应产生不同结果"
+
+
+def test_post_render_with_luxury_theme_via_data_field(client):
+    """测试 POST /render 通过 data 字段传递 luxury_theme 参数"""
+    payload = {
+        "legend_type": "table",
+        "style": "heatmap_light",
+        "width": 700,
+        "height": 900,
+        "title": "Luxury Table Test",
+        "data": {
+            "rows": [
+                {
+                    "team": "NEO",
+                    "team_color": "#29b98f",
+                    "name": "Player",
+                    "pts_created": 42.0,
+                    "ts": 61,
+                    "ast_tov": 2.4,
+                    "mpg": 35.0,
+                }
+            ],
+            "luxury_theme": "sapphire_platinum",
+            "luxury_theme_intensity": 0.8,
+        },
+    }
+
+    response = client.post("/render", json=payload)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    image = Image.open(BytesIO(response.content))
+    assert image.format == "PNG"

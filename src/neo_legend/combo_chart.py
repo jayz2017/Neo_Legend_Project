@@ -197,7 +197,8 @@ class ComboChartSkill(BaseLegendSkill):
 
         x = np.arange(n)
         bar_width = 0.50
-        neon_colors = ["#ff0055", "#00ff99", "#00ccff", "#ffcc00", "#ff00ff"][:n]
+        neon_colors = ["#ff0055", "#00ff99", "#00ccff", "#ffcc00", "#ff00ff"]
+        neon_colors = (neon_colors * ((n // len(neon_colors)) + 1))[:n]
 
         for i in range(n):
             nc = neon_colors[i]
@@ -309,7 +310,8 @@ class ComboChartSkill(BaseLegendSkill):
 
         x = np.arange(n)
         bar_width = 0.50
-        sunset_bar_colors = ["#f39c12", "#e74c3c", "#c0392b", "#d35400", "#e67e22"][:n]
+        sunset_bar_colors = ["#f39c12", "#e74c3c", "#c0392b", "#d35400", "#e67e22"]
+        sunset_bar_colors = (sunset_bar_colors * ((n // len(sunset_bar_colors)) + 1))[:n]
 
         for i in range(n):
             grad_colors = self._vertical_gradient(sunset_bar_colors[i], "#c0392b", 50, bottom_alpha=0.82, top_alpha=0.48)
@@ -394,7 +396,8 @@ class ComboChartSkill(BaseLegendSkill):
 
         x = np.arange(n)
         bar_width = 0.50
-        ocean_colors = ["#0077b6", "#00b4d8", "#48cae4", "#90e0ef", "#ade8f4"][:n]
+        ocean_colors = ["#0077b6", "#00b4d8", "#48cae4", "#90e0ef", "#ade8f4"]
+        ocean_colors = (ocean_colors * ((n // len(ocean_colors)) + 1))[:n]
 
         for i in range(n):
             depth_factor = (i + 1) / n

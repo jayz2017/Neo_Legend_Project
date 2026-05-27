@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import numpy as np
 from matplotlib.patches import Circle, Polygon, Rectangle
 from PIL import Image
-import numpy as np
 
-from neo_legend.models import RenderRequest, RenderResult
 from neo_legend._court import draw_half_court, sample_shots
 from neo_legend._plotting import add_canvas, create_figure, make_gradient, save_png, seeded_rng
 from neo_legend.base import BaseLegendSkill, StyleDefinition
+from neo_legend.models import RenderRequest, RenderResult
 
 
 class AnimatedCourtShotSkill(BaseLegendSkill):
@@ -28,7 +28,7 @@ class AnimatedCourtShotSkill(BaseLegendSkill):
             ("0ca42dfeab11e52e7e4a3a1665b81695.jpg",),
         ),
         StyleDefinition("pulse", "Animated pulse over the shooting terrain."),
-        StyleDefinition("sweep", "Animated left-to-right scan over shot clusters."),
+        StyleDefinition("sweep", "Animated progressive reveal over shot clusters."),
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
@@ -90,15 +90,57 @@ class AnimatedCourtShotSkill(BaseLegendSkill):
         x, y, value = sample_shots(seed=seed, count=shot_count)
         phase = index / max(frame_count - 1, 1)
         if style == "sweep":
-            alpha = np.clip(1.0 - np.abs((x + 250) / 500 - phase) * 2.4, 0.08, 0.92)
+            alpha = self._progressive_sweep_alpha(
+                total_count=len(x),
+                frame_index=index,
+                frame_count=frame_count,
+                settled_alpha=float(request.data.get("settled_alpha", 0.46)),
+                highlight_alpha=float(request.data.get("highlight_alpha", 0.92)),
+                highlight_tail=int(request.data.get("highlight_tail", 42)),
+            )
         else:
             radius = np.sqrt((x / 250) ** 2 + ((y - 60) / 420) ** 2)
             alpha = np.clip(np.sin((radius + phase) * np.pi * 2) * 0.45 + 0.5, 0.1, 0.9)
         cmap = make_gradient(["#2a2d31", "#7a3345", "#ec3456", "#ffe2d1"], "gif_terrain")
-        ax.scatter(x, y, c=value, cmap=cmap, s=18 + alpha * 64, marker="h", alpha=alpha, lw=0)
+        visible = alpha > 0
+        ax.scatter(
+            x[visible],
+            y[visible],
+            c=value[visible],
+            cmap=cmap,
+            s=18 + alpha[visible] * 64,
+            marker="h",
+            alpha=alpha[visible],
+            lw=0,
+        )
 
         png = save_png(fig)
         return Image.open(BytesIO(png)).convert("RGB")
+
+    @staticmethod
+    def _progressive_sweep_alpha(
+        total_count: int,
+        frame_index: int,
+        frame_count: int,
+        settled_alpha: float = 0.46,
+        highlight_alpha: float = 0.92,
+        highlight_tail: int = 42,
+    ) -> np.ndarray:
+        if total_count <= 0:
+            return np.array([], dtype=float)
+        progress = (frame_index + 1) / max(frame_count, 1)
+        visible_count = max(1, min(total_count, int(np.ceil(total_count * progress))))
+        alpha = np.zeros(total_count, dtype=float)
+        alpha[:visible_count] = np.clip(settled_alpha, 0.05, 1.0)
+
+        tail = max(1, min(highlight_tail, visible_count))
+        tail_start = visible_count - tail
+        tail_ramp = np.linspace(0.0, 1.0, tail)
+        alpha[tail_start:visible_count] = np.maximum(
+            alpha[tail_start:visible_count],
+            np.clip(settled_alpha + (highlight_alpha - settled_alpha) * tail_ramp, 0.05, 1.0),
+        )
+        return alpha
 
     def _arena_frame(
         self,
