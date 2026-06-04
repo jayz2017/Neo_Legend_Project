@@ -1,6 +1,12 @@
-"""Luxury radar chart renderer skill with three stunning visual variants."""
-
 from __future__ import annotations
+
+"""
+华丽雷达图渲染器 (Luxury Radar Chart Renderer)
+==================================================
+功能：多维度蜘蛛网雷达图，支持 neon_glow(霓虹发光)、crystal_metal(晶体金属)、gradient_rainbow(彩虹渐变) 三种奢华样式。
+特色：多层辉光效果、金属质感渐变、HSV 色彩过渡。
+"""
+
 
 import colorsys
 from typing import Any
@@ -20,13 +26,26 @@ from neo_legend._plotting import (
     seeded_rng,
 )
 from neo_legend.base import BaseLegendSkill, StyleDefinition
+from neo_legend.report_style import (
+    add_footer,
+    add_report_axes,
+    draw_kpi_strip,
+    draw_report_background,
+    draw_report_header,
+    draw_series_legend,
+    format_metric,
+    resolve_report_text,
+    resolve_report_theme,
+)
 
 
 class RadarChartSkill(BaseLegendSkill):
-    legend_type = "radar_chart"
-    display_name = "Luxury Radar Chart"
-    default_style = "neon_glow"
-    default_size = (1200, 1400)
+    """华丽雷达图渲染器 — 极坐标系多维数据可视化，支持 3 种霓虹/金属/彩虹视觉风格。"""
+
+    legend_type = "radar_chart"         # 图例类型标识
+    display_name = "Luxury Radar Chart" # 显示名称
+    default_style = "neon_glow"        # 默认样式：霓虹发光
+    default_size = (1200, 1400)        # 默认输出尺寸（宽 x 高）
     style_definitions = (
         StyleDefinition("neon_glow", "Neon glow effect with deep dark background and luminous lines."),
         StyleDefinition(
@@ -37,97 +56,127 @@ class RadarChartSkill(BaseLegendSkill):
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：解析样式并委托给 PNG 渲染管线。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         content = self._render_png(request, style, width, height)
         return self.result(content, style)
 
     def _render_png(self, request: RenderRequest, style: str, width: int, height: int) -> bytes:
+        """报告风格雷达图主渲染管线：构建极坐标轴、绘制数据多边形及装饰元素。"""
         data = self._extract_data(request.data)
         categories = data["categories"]
         datasets = data["datasets"]
-
-        bg_color = {
-            "neon_glow": "#0a0a1a",
-            "crystal_metal": "#1a1a2e",
-            "gradient_rainbow": "#000000",
-        }[style]
-
-        fig = create_figure(width, height, bg_color)
+        theme = resolve_report_theme(request.data, style)
+        fig = create_figure(width, height, theme.background)
         canvas = add_canvas(fig)
+        draw_report_background(canvas, theme)
 
-        title = request.title or "PLAYER RADAR PROFILE"
-        subtitle = request.subtitle or "MULTIDIMENSIONAL ANALYSIS"
-
-        canvas.text(
-            0.5,
-            0.92,
-            title.upper(),
-            color="#ffffff",
-            fontsize=48,
-            fontweight="black",
-            ha="center",
-            va="center",
-            family="sans-serif",
+        report_text = resolve_report_text(
+            request.data,
+            request.title,
+            request.subtitle,
+            default_title="PLAYER RADAR PROFILE",
+            default_subtitle="MULTIDIMENSIONAL ANALYSIS",
+            default_kicker="Radar Profile",
+            default_footer="NEO LEGEND | RADAR PROFILE REPORT",
         )
-        canvas.text(
-            0.5,
-            0.87,
-            subtitle.upper(),
-            color="#b0b0b0",
-            fontsize=16,
-            fontweight="bold",
-            ha="center",
-            va="center",
-            family="sans-serif",
+        draw_report_header(
+            canvas,
+            theme,
+            report_text.title,
+            report_text.subtitle,
+            report_text.kicker,
+            theme_label=report_text.theme_label,
         )
 
-        radar_ax = fig.add_axes([0.12, 0.15, 0.76, 0.62], projection="polar", facecolor=bg_color)
-        radar_ax.set_ylim(0, 100)
-        radar_ax.set_yticklabels([])
-        radar_ax.grid(False)
+        all_values = np.array(
+            [float(value) for dataset in datasets for value in dataset.get("values", [])],
+            dtype=float,
+        )
+        draw_kpi_strip(
+            canvas,
+            theme,
+            [
+                ("dimensions", str(len(categories)), theme.primary),
+                ("top score", format_metric(float(np.max(all_values))) if all_values.size else "0", theme.accent),
+                ("average", format_metric(float(np.mean(all_values))) if all_values.size else "0", theme.secondary),
+            ],
+        )
+
+        radar_ax = add_report_axes(fig, canvas, (0.125, 0.165, 0.75, 0.56), theme, polar=True)
 
         n_cats = len(categories)
-        angles = np.linspace(0, 2 * np.pi, n_cats, endpoint=False).tolist()
-        angles += angles[:1]
+        angles = np.linspace(0, 2 * np.pi, n_cats, endpoint=False).tolist()   # 均匀分布角度（弧度）
+        angles += angles[:1]                     # 首尾相接，形成闭合路径
+        max_observed = float(np.max(all_values)) if all_values.size else 100.0
+        max_value = float(data.get("max_value") or max(max_observed * 1.12, 100.0))
 
-        if style == "neon_glow":
-            self._draw_neon_glow(radar_ax, categories, datasets, angles, n_cats)
-        elif style == "crystal_metal":
-            self._draw_crystal_metal(radar_ax, categories, datasets, angles, n_cats)
-        else:
-            self._draw_gradient_rainbow(radar_ax, categories, datasets, angles, n_cats)
+        radar_ax.set_theta_offset(np.pi / 2)      # 角度偏移 π/2，使第一个维度指向正上方（12点钟方向）
+        radar_ax.set_theta_direction(-1)          # 顺时针方向排列维度
+        radar_ax.set_ylim(0, max_value)
+        radar_ax.set_xticks(angles[:-1])
+        radar_ax.set_xticklabels([str(category).upper() for category in categories])
+        radar_ax.tick_params(axis="x", colors=theme.text, labelsize=10, pad=10)
+        for tick in radar_ax.get_xticklabels():
+            tick.set_fontweight("bold")
+        ring_values = np.linspace(max_value / 4, max_value, 4)     # 同心圆环刻度值（25%、50%、75%、100%）
+        radar_ax.set_yticks(ring_values)
+        radar_ax.set_yticklabels([format_metric(value) for value in ring_values], color=theme.muted, fontsize=8)
+        radar_ax.grid(color=theme.grid, lw=0.9, alpha=0.52)
+        radar_ax.spines["polar"].set_color(theme.border)
+        radar_ax.spines["polar"].set_linewidth(1.2)
+        radar_ax.set_facecolor(theme.panel)
 
-        legend_x = 0.5
-        legend_y = 0.11
-        for idx, dataset in enumerate(datasets):
-            color = dataset["color"]
-            canvas.scatter(
-                [legend_x - 0.08 + idx * 0.16],
-                [legend_y],
-                s=120,
-                c=[color],
-                edgecolors="#ffffff",
-                linewidths=1.5,
-                zorder=10,
+        legend_items: list[tuple[str, str]] = []
+        for index, dataset in enumerate(datasets):
+            values = [float(value) for value in dataset["values"][:n_cats]]
+            if len(values) < n_cats:
+                values.extend([0.0] * (n_cats - len(values)))       # 数据不足时补零
+            closed_values = values + values[:1]                      # 闭合多边形（首尾点重合）
+            color = dataset.get("color") or theme.palette[index % len(theme.palette)]
+            legend_items.append((str(dataset.get("label", f"Series {index + 1}")).upper(), color))
+            for width_line, alpha in ((7.0, 0.07), (4.2, 0.18), (2.6, 0.96)):
+                radar_ax.plot(
+                    angles,
+                    closed_values,
+                    color=color,
+                    linewidth=width_line,
+                    alpha=alpha,
+                    solid_capstyle="round",
+                    zorder=5 + index,
+                )
+            radar_ax.fill(angles, closed_values, color=color, alpha=0.12, zorder=3)
+            radar_ax.scatter(
+                angles[:-1],
+                values,
+                color=theme.panel,
+                edgecolors=color,
+                s=64,
+                linewidths=2,
+                zorder=12,
             )
-            canvas.text(
-                legend_x - 0.02 + idx * 0.16,
-                legend_y,
-                dataset["label"].upper(),
-                color=color,
-                fontsize=13,
-                fontweight="bold",
-                ha="left",
-                va="center",
-                family="sans-serif",
-            )
+            if n_cats <= 7:
+                for angle, value in zip(angles[:-1], values, strict=False):
+                    radar_ax.text(
+                        angle,
+                        min(value + max_value * 0.045, max_value * 1.02),   # 标签偏移量随数值自适应
+                        format_metric(value),
+                        color=color,
+                        fontsize=8,
+                        fontweight="bold",
+                        ha="center",
+                        va="center",
+                        zorder=13,
+                    )
 
-        add_reference_footer(canvas, "GENERATED BY NEO LEGEND")
+        draw_series_legend(canvas, theme, legend_items, y=0.095)
+        add_footer(canvas, theme, report_text.footer)
         return save_png(fig)
 
     @staticmethod
     def _extract_data(data: dict[str, Any]) -> dict[str, Any]:
+        """从请求数据中提取分类和序列；若无有效数据则生成随机演示数据。"""
         if data.get("categories") and data.get("datasets"):
             return data
 
@@ -153,14 +202,15 @@ class RadarChartSkill(BaseLegendSkill):
         angles: list[float],
         n_cats: int,
     ) -> None:
+        """霓虹发光样式渲染：多层线条叠加产生辉光效果，配合彩色维度标签。"""
         ax.set_facecolor("#0a0a1a")
 
         grid_levels = 5
         for level in range(grid_levels, 0, -1):
-            radius = level * 20
+            radius = level * 20                          # 同心网格半径递增
             values_grid = [radius] * (n_cats + 1)
-            alpha_grid = 0.06 + (grid_levels - level) * 0.03
-            lw_grid = 0.5 + (grid_levels - level) * 0.2
+            alpha_grid = 0.06 + (grid_levels - level) * 0.03   # 外层更透明
+            lw_grid = 0.5 + (grid_levels - level) * 0.2         # 外层线宽更细
             ax.plot(angles, values_grid, color="#3a3a6a", linewidth=lw_grid, alpha=alpha_grid)
 
         for i, angle in enumerate(angles[:-1]):
@@ -169,8 +219,8 @@ class RadarChartSkill(BaseLegendSkill):
         neon_colors = ["#00ffff", "#ff00ff", "#ffff00", "#00ff88", "#ff6688"]
         for i, cat in enumerate(categories):
             angle_rad = angles[i]
-            x_text = 1.18 * np.cos(angle_rad - np.pi / 2)
-            y_text = 1.18 * np.sin(angle_rad - np.pi / 2)
+            x_text = 1.18 * np.cos(angle_rad - np.pi / 2)    # 极坐标→笛卡尔坐标 X
+            y_text = 1.18 * np.sin(angle_rad - np.pi / 2)    # 极坐标→笛卡尔坐标 Y
             color = neon_colors[i % len(neon_colors)]
             ax.text(
                 angle_rad,
@@ -198,7 +248,7 @@ class RadarChartSkill(BaseLegendSkill):
             )
 
         for dataset in datasets:
-            values = dataset["values"] + dataset["values"][:1]
+            values = dataset["values"] + dataset["values"][:1]    # 闭合路径
             color = dataset["color"]
 
             for lw, alpha in [(4, 0.15), (2.5, 0.4), (1, 0.9)]:
@@ -229,6 +279,7 @@ class RadarChartSkill(BaseLegendSkill):
         angles: list[float],
         n_cats: int,
     ) -> None:
+        """晶体金属样式渲染：银/金/铜三色渐变填充、菱形数据点、峰值高亮椭圆。"""
         ax.set_facecolor("#1a1a2e")
 
         grid_levels = 5
@@ -271,14 +322,14 @@ class RadarChartSkill(BaseLegendSkill):
             cmap = metal_gradients[gradient_name]
 
             n_points = len(values)
-            for j in range(n_points - 1):
+            for j in range(n_points - 1):                              # 逐段着色实现金属渐变
                 seg_values = values[j : j + 2]
                 seg_angles = angles[j : j + 2]
                 segment_color = cmap(j / max(n_points - 2, 1))
                 ax.fill(seg_angles, seg_values, color=segment_color, alpha=0.7)
-                ax.plot(seg_angles, seg_values, color="#d4af37", linewidth=2, solid_capstyle="round")
+                ax.plot(seg_angles, seg_angles if False else seg_values, color="#d4af37", linewidth=2, solid_capstyle="round")
 
-            max_value_idx = dataset["values"].index(max(dataset["values"]))
+            max_value_idx = dataset["values"].index(max(dataset["values"]))   # 定位最高得分维度
             peak_angle = angles[max_value_idx]
             peak_value = dataset["values"][max_value_idx]
 
@@ -295,11 +346,11 @@ class RadarChartSkill(BaseLegendSkill):
             ax.add_patch(highlight)
 
             arc_angles = np.linspace(peak_angle - 0.12, peak_angle + 0.12, 30)
-            arc_radii = peak_value + 3 * np.cos(np.linspace(0, np.pi, 30)) - 1
+            arc_radii = peak_value + 3 * np.cos(np.linspace(0, np.pi, 30)) - 1   # 弧形高光轨迹
             ax.plot(arc_angles, arc_radii, color="#ffffff", linewidth=2, alpha=0.7, zorder=14)
 
             for j, (angle, value) in enumerate(zip(angles[:-1], dataset["values"])):
-                diamond_size = 100 + (value / 100) * 60
+                diamond_size = 100 + (value / 100) * 60           # 菱形大小随数值缩放
                 ax.scatter(
                     [angle],
                     [value],
@@ -331,6 +382,7 @@ class RadarChartSkill(BaseLegendSkill):
         angles: list[float],
         n_cats: int,
     ) -> None:
+        """彩虹渐变样式渲染：基于 HSV 色彩空间的连续光谱过渡，星形标记点缀。"""
         ax.set_facecolor("#000000")
 
         grid_levels = 5
@@ -372,7 +424,7 @@ class RadarChartSkill(BaseLegendSkill):
 
             rainbow_colors = []
             for j in range(len(dataset["values"]) + 1):
-                hue_offset = (j / n_cats + base_hue) % 1.0
+                hue_offset = (j / n_cats + base_hue) % 1.0              # 色相沿路径偏移
                 rgb = colorsys.hsv_to_rgb(hue_offset, 0.85, 0.95)
                 hex_color = f"#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}"
                 rainbow_colors.append(hex_color)

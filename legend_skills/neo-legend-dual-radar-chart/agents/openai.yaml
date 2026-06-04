@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Dual Radar Comparison (Neo Legend 双雷达对比图)"
+  short_description: "Tune `dual_radar_chart` chart styling and data rules. (调优 `dual_radar_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-dual-radar-chart to tune the Neo Legend `dual_radar_chart` renderer. (使用 $neo-legend-dual-radar-chart 来调优 Neo Legend `dual_radar_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Rose Donut Chart (Neo Legend 玫瑰图)"
+  short_description: "Tune `rose` chart styling and data rules. (调优 `rose` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-rose to tune the Neo Legend `rose` renderer. (使用 $neo-legend-rose 来调优 Neo Legend `rose` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

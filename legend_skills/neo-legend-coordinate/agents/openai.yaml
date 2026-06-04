@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Coordinate Bubble Chart (Neo Legend 坐标散点图)"
+  short_description: "Tune `coordinate` chart styling and data rules. (调优 `coordinate` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-coordinate to tune the Neo Legend `coordinate` renderer. (使用 $neo-legend-coordinate 来调优 Neo Legend `coordinate` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Luxury Radar Chart (Neo Legend 华丽雷达图)"
+  short_description: "Tune `radar_chart` chart styling and data rules. (调优 `radar_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-radar-chart to tune the Neo Legend `radar_chart` renderer. (使用 $neo-legend-radar-chart 来调优 Neo Legend `radar_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

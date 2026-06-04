@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Dual Court Shooting Comparison (Neo Legend 双球场对比图)"
+  short_description: "Tune `dual_court_shot` chart styling and data rules. (调优 `dual_court_shot` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-dual-court-shot to tune the Neo Legend `dual_court_shot` renderer. (使用 $neo-legend-dual-court-shot 来调优 Neo Legend `dual_court_shot` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

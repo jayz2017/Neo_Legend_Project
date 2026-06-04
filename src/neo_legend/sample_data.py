@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """Synthetic data builders for every built-in legend type."""
 
-from __future__ import annotations
 
 from typing import Any
 
@@ -68,6 +69,44 @@ def sample_data_for(legend_type: str, style: str) -> dict[str, Any]:
     if normalized == "court_shot_animation":
         frame_count = 14 if style == "arena_arc" else 10
         return {"shot_count": 430, "seed": 31, "frame_count": frame_count}
+    if normalized == "line_chart":
+        return {
+            "categories": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
+            "series": [
+                {"label": "Revenue", "values": [42, 51, 48, 64, 72, 84]},
+                {"label": "Margin", "values": [31, 36, 39, 45, 49, 57]},
+            ],
+            "benchmark": 50,
+            "x_label": "Quarter",
+            "y_label": "Index",
+        }
+    if normalized == "calendar_chart":
+        return {
+            "month_label": "May 2026",
+            "start_weekday": 4,
+            "days": 31,
+            "events": [
+                {"day": 2, "type": "RATE", "impact": 0.80},
+                {"day": 3, "type": "M&A", "impact": 0.88},
+                {"day": 4, "type": "IPO", "impact": 0.70},
+                {"day": 7, "type": "EPS", "impact": 0.62},
+                {"day": 9, "type": "RATE", "impact": 0.74},
+                {"day": 12, "type": "EPS", "impact": 0.88},
+                {"day": 15, "type": "M&A", "impact": 0.70},
+                {"day": 18, "type": "EPS", "impact": 0.95},
+                {"day": 23, "type": "IPO", "impact": 0.65},
+                {"day": 25, "type": "M&A", "impact": 0.92},
+                {"day": 31, "type": "EPS", "impact": 0.85},
+            ],
+        }
+    if normalized == "matrix_bubble_chart":
+        return {}
+    if normalized == "chord_chart":
+        return {}
+    if normalized == "scatter_matrix_chart":
+        return {}
+    if normalized == "stacked_bar_chart":
+        return {}
     if normalized == "court_shot":
         if style == "points_location":
             return {
@@ -156,6 +195,18 @@ def _sample_title(legend_type: str, style: str) -> str:
         "plus_minus_coordinate": "The Efficiency Landscape",
         "rose": "Lottery Reform",
         "table": "Leaders In Points Created",
+        "radar_chart": "Player Radar Profile",
+        "dual_radar_chart": "Dual Radar Comparison",
+        "bar_chart": "Performance Analytics",
+        "line_chart": "Trend Performance",
+        "combo_chart": "Performance Overview",
+        "bubble_chart": "Bubble Distribution",
+        "sankey_chart": "Flow Analysis",
+        "calendar_chart": "Catalyst Calendar",
+        "matrix_bubble_chart": "Cross-Asset Correlation Matrix",
+        "chord_chart": "Capital Flow Chord",
+        "scatter_matrix_chart": "Macro Pair Matrix",
+        "stacked_bar_chart": "Segment Contribution",
     }
     if style != "default":
         return titles.get(legend_type, legend_type).title()
@@ -180,6 +231,18 @@ def _sample_subtitle(legend_type: str, style: str) -> str:
         "plus_minus_coordinate": "Round 1 Only | Simulated Sample",
         "rose": 'Current System Versus "Proposal 1"',
         "table": "Playoffs",
+        "radar_chart": "Multidimensional Analysis",
+        "dual_radar_chart": "Head-to-head performance analysis",
+        "bar_chart": "Ranked value comparison with benchmark context",
+        "line_chart": "Time-series movement with benchmark context",
+        "combo_chart": "Primary volume with secondary trend signal",
+        "bubble_chart": "Position, scale and category intensity in one view",
+        "sankey_chart": "Weighted transition paths with node totals",
+        "calendar_chart": "Catalyst calendar for commercial reporting",
+        "matrix_bubble_chart": "Bubble size encodes magnitude, color encodes direction",
+        "chord_chart": "Inter-segment allocation intensity and direction",
+        "scatter_matrix_chart": "Small multiples for cross-metric inspection",
+        "stacked_bar_chart": "Stacked category composition with total ranking",
     }
     return subtitles.get(legend_type, "Simulated Sample")
 

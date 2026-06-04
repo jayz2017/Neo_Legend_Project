@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Luxury Bubble Chart (Neo Legend 华丽水滴图)"
+  short_description: "Tune `bubble_chart` chart styling and data rules. (调优 `bubble_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-bubble-chart to tune the Neo Legend `bubble_chart` renderer. (使用 $neo-legend-bubble-chart 来调优 Neo Legend `bubble_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

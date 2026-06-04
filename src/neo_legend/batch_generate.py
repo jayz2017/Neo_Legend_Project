@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """Batch generation, logging, and visual comparison workflow."""
 
-from __future__ import annotations
 
 import argparse
 import json

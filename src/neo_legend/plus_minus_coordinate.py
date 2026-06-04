@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+"""
+正负值四象限坐标图渲染器 (Plus/Minus Coordinate Renderer)
+===========================================================
+功能：生成球队效率四象限图，X 轴为进攻效率、Y 轴为防守效率，对角线区分正负向球队。
+依赖：matplotlib, numpy
+"""
+
 """Positive/negative quadrant coordinate renderer skill."""
 
-from __future__ import annotations
 
 from typing import Any
 
@@ -12,11 +20,13 @@ from neo_legend.base import BaseLegendSkill, StyleDefinition
 
 
 class PlusMinusCoordinateSkill(BaseLegendSkill):
-    legend_type = "plus_minus_coordinate"
+    """正负值四象限坐标渲染器 — 以四象限散点图展示球队的攻防效率分布，右上为理想区域。"""
+
+    legend_type = "plus_minus_coordinate"   # 图例类型标识符
     display_name = "Positive Negative Coordinate Chart"
-    default_style = "paper_quadrant"
-    default_size = (1179, 1174)
-    style_definitions = (
+    default_style = "paper_quadrant"         # 默认样式：纸质纹理四象限
+    default_size = (1179, 1174)              # 默认输出尺寸
+    style_definitions = (                    # 样式定义元组
         StyleDefinition(
             "paper_quadrant",
             "Light textured efficiency quadrant chart with diagonal benchmark.",
@@ -26,6 +36,7 @@ class PlusMinusCoordinateSkill(BaseLegendSkill):
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：绘制标题、坐标轴、对角基准线、球队标记点和象限标注。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         background = "#f5f3ee" if style == "paper_quadrant" else "#ffffff"
@@ -63,14 +74,14 @@ class PlusMinusCoordinateSkill(BaseLegendSkill):
 
         ax = fig.add_axes([0.08, 0.10, 0.84, 0.72], facecolor="none")
         if style == "paper_quadrant":
-            noise = seeded_rng(19).normal(0.55, 0.18, (90, 90))
+            noise = seeded_rng(19).normal(0.55, 0.18, (90, 90))      # 纸质纹理噪声
             ax.imshow(noise, extent=(-15, 15, -15, 15), cmap="Greys", alpha=0.11, origin="lower")
 
-        ax.axhline(0, color="#1d1d1d", lw=1, alpha=0.72)
-        ax.axvline(0, color="#1d1d1d", lw=1, alpha=0.72)
-        ax.plot([-14.5, 14.5], [14.5, -14.5], color="#444444", lw=1, ls=(0, (5, 8)), alpha=0.55)
-        ax.text(-14.5, 0.25, "Offensive Efficiency", fontsize=17, ha="left", va="bottom")
-        ax.text(0.3, -14.7, "Defensive Efficiency", fontsize=17, rotation=90, ha="left", va="bottom")
+        ax.axhline(0, color="#1d1d1d", lw=1, alpha=0.72)               # X 轴（防守效率分界线）
+        ax.axvline(0, color="#1d1d1d", lw=1, alpha=0.72)               # Y 轴（进攻效率分界线）
+        ax.plot([-14.5, 14.5], [14.5, -14.5], color="#444444", lw=1, ls=(0, (5, 8)), alpha=0.55)  # 对角基准线
+        ax.text(-14.5, 0.25, "Offensive Efficiency", fontsize=17, ha="left", va="bottom")  # X 轴标签
+        ax.text(0.3, -14.7, "Defensive Efficiency", fontsize=17, rotation=90, ha="left", va="bottom")  # Y 轴标签
 
         for point in self._points(request.data):
             x = float(point["x"])
@@ -78,13 +89,13 @@ class PlusMinusCoordinateSkill(BaseLegendSkill):
             label = str(point["label"])
             color = str(point["color"])
             ax.scatter([x], [y], s=850, color=color, alpha=0.9, edgecolor="#1b1b1b", linewidth=1.2)
-            ax.text(x, y, label[:3].upper(), color="#ffffff", fontsize=11, fontweight="bold", ha="center", va="center")
+            ax.text(x, y, label[:3].upper(), color="#ffffff", fontsize=11, fontweight="bold", ha="center", va="center")  # 球队三字母代码
             if point.get("note"):
                 ax.text(x + 0.85, y, str(point["note"]), fontsize=12, color="#232323", ha="left", va="center")
 
-        ax.text(5.3, 6.0, "THE QUADRANT\nOF WOW", color="#777777", fontsize=12, ha="center", style="italic")
-        ax.text(-8.5, -9.5, "THE QUADRANT\nOF WOE", color="#777777", fontsize=12, ha="center", style="italic")
-        ax.text(11.0, -11.0, "Positive Teams\nNegative Teams", color="#7b7b7b", fontsize=11, rotation=-45)
+        ax.text(5.3, 6.0, "THE QUADRANT\nOF WOW", color="#777777", fontsize=12, ha="center", style="italic")  # 右上角：攻防俱佳区
+        ax.text(-8.5, -9.5, "THE QUADRANT\nOF WOE", color="#777777", fontsize=12, ha="center", style="italic")  # 左下角：攻防皆弱区
+        ax.text(11.0, -11.0, "Positive Teams\nNegative Teams", color="#7b7b7b", fontsize=11, rotation=-45)  # 对角线说明
         ax.set_xlim(-15, 15)
         ax.set_ylim(-15, 15)
         ax.set_axis_off()
@@ -92,6 +103,7 @@ class PlusMinusCoordinateSkill(BaseLegendSkill):
 
     @staticmethod
     def _points(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """解析球队数据点：优先使用请求中的自定义数据，否则生成默认的 NBA 球队模拟数据（含队色和备注）。"""
         raw_points = data.get("points")
         if isinstance(raw_points, list) and raw_points:
             return [point for point in raw_points if isinstance(point, dict)]
@@ -116,10 +128,10 @@ class PlusMinusCoordinateSkill(BaseLegendSkill):
         return [
             {
                 "label": label,
-                "x": float(rng.uniform(-10.5, 11.5)),
-                "y": float(rng.uniform(-11.5, 11.5)),
+                "x": float(rng.uniform(-10.5, 11.5)),             # 进攻效率偏移量
+                "y": float(rng.uniform(-11.5, 11.5)),             # 防守效率偏移量
                 "color": colors[index],
-                "note": "TWINNING" if index in {0, 6} else "",
+                "note": "TWINNING" if index in {0, 6} else "",     # ORL 和 OKC 的特殊备注
             }
             for index, label in enumerate(labels)
         ]

@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+"""
+热力排名表格渲染器 (Heatmap Ranking Table Renderer)
+==================================================
+功能：生成 NBA 风格的统计排名表格，支持热力色单元格、分组表头、渐变列、左侧行图合成等高级特性。
+依赖：matplotlib, numpy, PIL
+"""
+
 """Heatmap table renderer skill."""
 
-from __future__ import annotations
 
 import random
 from functools import lru_cache
@@ -10,7 +18,7 @@ from typing import Any
 
 from matplotlib.font_manager import FontProperties
 from matplotlib.patches import Circle, Rectangle
-from PIL import Image, ImageOps
+from PIL import Image, ImageColor, ImageOps
 
 from neo_legend._plotting import add_canvas, cmap_color, create_figure, save_png
 from neo_legend.base import BaseLegendSkill, StyleDefinition
@@ -85,11 +93,13 @@ LEAGUE_TABLE_THEMES: dict[str, dict[str, str]] = {
 
 
 class TableSkill(BaseLegendSkill):
-    legend_type = "table"
+    """热力排名表格渲染器 — 支持多种主题配色、分组表头、发散渐变列和左侧行图合成的专业统计表格。"""
+
+    legend_type = "table"                  # 图例类型标识符
     display_name = "Heatmap Ranking Table"
-    default_style = "heatmap_light"
-    default_size = (1179, 1481)
-    style_definitions = (
+    default_style = "heatmap_light"         # 默认样式：浅色热力表格
+    default_size = (1179, 1481)             # 默认输出尺寸
+    style_definitions = (                    # 样式定义元组
         StyleDefinition(
             "heatmap_light",
             "White-background ranking table with heat colored stat cells.",
@@ -106,6 +116,7 @@ class TableSkill(BaseLegendSkill):
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：根据样式分发到通用热力表格或联赛排名渐变表格。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         if style == "league_standings_gradient":
@@ -187,12 +198,12 @@ class TableSkill(BaseLegendSkill):
                 x = table_left + logo_w + name_w + cell_w * col_idx
                 fill = self._cell_color(col_idx, float(value), style)
                 canvas.add_patch(Rectangle((x, y), cell_w, row_h, facecolor=fill, edgecolor=line_color, lw=0.7))
-                suffix = "%" if col_idx == 1 else ""
+                suffix = "%" if col_idx == 1 else ""                   # TS% 列加百分号后缀
                 canvas.text(
                     x + cell_w / 2,
                     y + row_h / 2,
                     f"{value:.1f}{suffix}" if col_idx != 1 else f"{value:.0f}{suffix}",
-                    color="#050505" if style == "heatmap_light" else "#ffffff",
+                    color=self._cell_text_color(fill),
                     fontsize=21,
                     fontweight="bold" if col_idx == 0 else "normal",
                     ha="center",
@@ -206,26 +217,40 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _draw_logo(canvas, x: float, y: float, label: str, color: str) -> None:
+        """绘制球队圆形 Logo 标记：彩色圆圈加三字母队名缩写。"""
         canvas.add_patch(Circle((x, y), 0.018, facecolor=color, edgecolor="#ffffff", lw=1.2))
         canvas.text(x, y, label[:3].upper(), color="#ffffff", fontsize=7, fontweight="bold", ha="center", va="center")
 
     @staticmethod
     def _cell_color(column_index: int, value: float, style: str) -> str:
-        if column_index == 0:
+        """根据列索引和数据值计算热力色：每列有独立的归一化区间和颜色映射。"""
+        if column_index == 0:                                      # PTS CREATED 列：黄→金渐变
             t = min(max((value - 32) / 24, 0), 1)
             colors = ["#fff5bf", "#ffd400"] if style == "heatmap_light" else ["#4d3300", "#ffd400"]
             return cmap_color(colors, t)
-        if column_index == 1:
+        if column_index == 1:                                      # TS% 列：红→黄→绿发散
             t = min(max((value - 48) / 22, 0), 1)
             return cmap_color(["#f6c8d0", "#f7f1bd", "#a6efb7"], t)
-        if column_index == 2:
+        if column_index == 2:                                      # AST/TOV 列：红→黄→绿发散
             t = min(max((value - 0.8) / 3.0, 0), 1)
             return cmap_color(["#f7b7c3", "#fff1b8", "#a6eeb7"], t)
-        t = 1 - min(max((value - 31) / 10, 0), 1)
+        t = 1 - min(max((value - 31) / 10, 0), 1)                 # MPG 列：反向映射（高值偏冷）
         return cmap_color(["#f7b7c3", "#fff1b8", "#b7f2c0"], t)
 
     @staticmethod
+    def _cell_text_color(fill: str) -> str:
+        """根据背景色的亮度自动选择黑色或白色文字以保证可读性（基于相对亮度公式）。"""
+        red, green, blue = ImageColor.getrgb(fill)[:3]
+        channels = []
+        for channel in (red, green, blue):
+            value = channel / 255
+            channels.append(value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4)  # gamma 校正
+        luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+        return "#050505" if luminance > 0.42 else "#ffffff"
+
+    @staticmethod
     def _rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """解析行数据：优先使用请求中的自定义数据，否则生成默认的 NBA 球员统计模拟数据。"""
         rows = data.get("rows")
         if isinstance(rows, list) and rows:
             return [row for row in rows if isinstance(row, dict)]
@@ -273,6 +298,7 @@ class TableSkill(BaseLegendSkill):
         width: int,
         height: int,
     ) -> bytes:
+        """联赛排名渐变表格入口：支持左侧行图合成，将图片与表格水平拼接。"""
         data = request.data
         left_image_config = self._left_image_config(data)
         if left_image_config:
@@ -294,6 +320,7 @@ class TableSkill(BaseLegendSkill):
         width: int,
         height: int,
     ) -> bytes:
+        """核心表格渲染引擎：解析配置、计算布局、绘制表头/数据行/平均行，输出 PNG 字节流。"""
         theme = self._league_theme(data)
         fig = create_figure(width, height, theme["canvas"])
         canvas = add_canvas(fig)
@@ -302,24 +329,24 @@ class TableSkill(BaseLegendSkill):
         rows = self._league_rows(data)
         average_row = data.get("average_row")
         if not isinstance(average_row, dict):
-            average_row = self._computed_average_row(columns, rows)
+            average_row = self._computed_average_row(columns, rows)   # 自动计算联盟平均值行
         gradients = self._gradient_configs(data, columns, rows, average_row, theme=theme)
 
-        left = float(data.get("left", 0.003))
-        right = float(data.get("right", 0.997))
-        top = float(data.get("top", 0.996))
-        bottom = float(data.get("bottom", 0.018))
+        left = float(data.get("left", 0.003))                       # 表格左边距
+        right = float(data.get("right", 0.997))                     # 表格右边距
+        top = float(data.get("top", 0.996))                         # 表格顶部边距
+        bottom = float(data.get("bottom", 0.018))                   # 表格底部边距
         header_groups = self._header_groups(data, columns)
-        header_h = float(data.get("header_height", 0.118 if header_groups else 0.096))
+        header_h = float(data.get("header_height", 0.118 if header_groups else 0.096))  # 分组表头更高
         row_count = len(rows) + (1 if average_row else 0)
         row_h = min(
             float(data.get("row_height", 0.052)),
-            max((top - bottom - header_h) / max(row_count, 1), 0.018),
+            max((top - bottom - header_h) / max(row_count, 1), 0.018),  # 自适应行高，防止溢出
         )
 
-        widths = self._column_widths(columns, left, right)
-        x_positions = self._column_positions(columns, left, right)
-        font = self._cjk_font()
+        widths = self._column_widths(columns, left, right)           # 各列宽度（按权重比例分配）
+        x_positions = self._column_positions(columns, left, right)   # 各列起始 X 坐标
+        font = self._cjk_font()                                     # 加载中文字体
         header_fontsize = self._font_size(width, height, row_h, min_size=8.0, max_size=14.0, scale=0.34)
         body_fontsize = self._font_size(width, height, row_h, min_size=8.0, max_size=13.0, scale=0.30)
 
@@ -327,7 +354,7 @@ class TableSkill(BaseLegendSkill):
         header_color = str(data.get("header_color", theme["header"]))
         header_edge = str(data.get("header_edge_color", theme["header_edge"]))
         if header_groups:
-            self._draw_grouped_header(
+            self._draw_grouped_header(                               # 绘制分组表头（父级+子级）
                 canvas=canvas,
                 columns=columns,
                 groups=header_groups,
@@ -342,7 +369,7 @@ class TableSkill(BaseLegendSkill):
                 child_ratio=float(data.get("child_header_ratio", 0.52)),
             )
         else:
-            self._draw_flat_header(
+            self._draw_flat_header(                                  # 绘制单行扁平表头
                 canvas=canvas,
                 columns=columns,
                 x_positions=x_positions,
@@ -356,7 +383,7 @@ class TableSkill(BaseLegendSkill):
             )
 
         y = header_y
-        if average_row:
+        if average_row:                                            # 绘制联盟平均行（在数据行上方）
             y -= row_h
             self._draw_league_row(
                 canvas=canvas,
@@ -374,7 +401,7 @@ class TableSkill(BaseLegendSkill):
                 theme=theme,
             )
 
-        for row_index, row in enumerate(rows):
+        for row_index, row in enumerate(rows):                      # 逐行绘制数据行
             y -= row_h
             self._draw_league_row(
                 canvas=canvas,
@@ -407,6 +434,7 @@ class TableSkill(BaseLegendSkill):
         fill: str,
         edge: str,
     ) -> None:
+        """绘制单行扁平表头：每个列一个矩形单元格加居中文字。"""
         for column, x, col_w in zip(columns, x_positions, widths, strict=True):
             canvas.add_patch(Rectangle((x, header_y), col_w, header_h, facecolor=fill, edgecolor=edge, lw=1.1))
             self._draw_text(
@@ -437,9 +465,11 @@ class TableSkill(BaseLegendSkill):
         edge: str,
         child_ratio: float,
     ) -> None:
+        """绘制分组表头：支持父级标签跨多列合并，子级标签按列细分，三种显示模式。"""
         key_to_index = {str(column["key"]): index for index, column in enumerate(columns)}
-        child_h = header_h * max(min(child_ratio, 0.72), 0.28)
-        parent_h = header_h - child_h
+        child_h = header_h * max(min(child_ratio, 0.72), 0.28)      # 子表头高度占比
+        parent_h = header_h - child_h                              # 父表头高度
+
         grouped_keys: set[str] = set()
 
         for group in groups:
@@ -451,7 +481,7 @@ class TableSkill(BaseLegendSkill):
             children = [child for child in group.get("children", []) if child.get("columns")]
             show_children = bool(group.get("show_children", True)) and bool(children)
 
-            if show_children:
+            if show_children:                                       # 模式1：父+子双层表头
                 canvas.add_patch(
                     Rectangle((x, header_y + child_h), width, parent_h, facecolor=fill, edgecolor=edge, lw=1.1)
                 )
@@ -487,7 +517,7 @@ class TableSkill(BaseLegendSkill):
                         ha="center",
                         va="center",
                     )
-            elif bool(group.get("show_children", True)):
+            elif bool(group.get("show_children", True)):          # 模式2：父跨列+独立子列
                 canvas.add_patch(
                     Rectangle((x, header_y + child_h), width, parent_h, facecolor=fill, edgecolor=edge, lw=1.1)
                 )
@@ -527,7 +557,7 @@ class TableSkill(BaseLegendSkill):
                         ha="center",
                         va="center",
                     )
-            else:
+            else:                                                   # 模式3：单一父级合并单元格
                 canvas.add_patch(Rectangle((x, header_y), width, header_h, facecolor=fill, edgecolor=edge, lw=1.1))
                 self._draw_text(
                     canvas,
@@ -542,7 +572,7 @@ class TableSkill(BaseLegendSkill):
                     va="center",
                 )
 
-        for index, column in enumerate(columns):
+        for index, column in enumerate(columns):                     # 处理未分组的独立列
             key = str(column["key"])
             if key in grouped_keys:
                 continue
@@ -585,21 +615,22 @@ class TableSkill(BaseLegendSkill):
         is_average: bool,
         theme: dict[str, str],
     ) -> None:
+        """绘制单行数据：根据行类型选择底色，对启用渐变的列使用发散着色，并按对齐方式排版文字。"""
         if is_average:
-            row_fill = theme["average"]
+            row_fill = theme["average"]                             # 平均行专用底色
             edge = theme["average_edge"]
         elif row_index == 0:
-            row_fill = theme["first_row"]
+            row_fill = theme["first_row"]                           # 首行高亮底色
             edge = theme["first_edge"]
         else:
-            row_fill = theme["row_odd"] if row_index % 2 else theme["row_even"]
+            row_fill = theme["row_odd"] if row_index % 2 else theme["row_even"]  # 斑马纹交替
             edge = theme["cell_edge"]
 
         for column, x, col_w in zip(columns, x_positions, widths, strict=True):
             key = str(column["key"])
             fill = row_fill
             value = row.get(key)
-            if not is_average and key in gradients:
+            if not is_average and key in gradients:                 # 对启用了渐变配置的列进行发散着色
                 numeric_value = self._to_float(value)
                 if numeric_value is not None:
                     fill = self._diverging_cell_color(
@@ -645,6 +676,7 @@ class TableSkill(BaseLegendSkill):
         x_positions: list[float],
         widths: list[float],
     ) -> tuple[float, float]:
+        """计算一组连续键对应的 X 起始坐标和总跨度宽度。"""
         indexes = sorted(key_to_index[key] for key in keys if key in key_to_index)
         if not indexes:
             return 0.0, 0.0
@@ -654,6 +686,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _header_groups(data: dict[str, Any], columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """解析表头分组配置：优先从 data 中读取显式分组定义，否则从列的 parent 属性自动推断。"""
         column_keys = {str(column["key"]) for column in columns}
         raw_groups = data.get("header_groups")
         if isinstance(raw_groups, list):
@@ -675,7 +708,7 @@ class TableSkill(BaseLegendSkill):
                 )
             return groups
 
-        groups = []
+        groups = []                                                  # 从列 parent 属性自动推断分组
         current_parent: str | None = None
         current_columns: list[str] = []
         for column in columns:
@@ -721,6 +754,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _header_children(raw_group: dict[str, Any], column_keys: set[str]) -> list[dict[str, Any]]:
+        """从原始分组配置中提取有效的子分组列表。"""
         raw_children = raw_group.get("children", raw_group.get("subheaders", []))
         if not isinstance(raw_children, list):
             return []
@@ -742,6 +776,7 @@ class TableSkill(BaseLegendSkill):
         children: list[dict[str, Any]],
         column_keys: set[str],
     ) -> list[str]:
+        """获取分组覆盖的所有列键名：优先取显式 columns 定义，否则聚合所有子分组的列。"""
         raw_columns = raw_group.get("columns", raw_group.get("keys"))
         if isinstance(raw_columns, list):
             return [str(key) for key in raw_columns if str(key) in column_keys]
@@ -752,6 +787,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _league_theme(data: dict[str, Any]) -> dict[str, str]:
+        """解析并应用表格主题配置：支持 random 随机选择、自定义覆盖和四种内置主题。"""
         raw_theme = str(data.get("color_theme", data.get("theme", "random"))).strip().lower()
         if raw_theme == "random":
             theme_names = sorted(LEAGUE_TABLE_THEMES)
@@ -763,7 +799,7 @@ class TableSkill(BaseLegendSkill):
         data["_resolved_color_theme"] = raw_theme
         theme = dict(LEAGUE_TABLE_THEMES[raw_theme])
 
-        overrides = data.get("theme_overrides")
+        overrides = data.get("theme_overrides")                    # 支持逐属性覆盖主题色
         if isinstance(overrides, dict):
             for key, value in overrides.items():
                 if key in theme and isinstance(value, str):
@@ -772,10 +808,12 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _available_league_themes() -> list[dict[str, str]]:
+        """返回所有可用主题的深拷贝列表（供外部查询）。"""
         return [dict(theme) for theme in LEAGUE_TABLE_THEMES.values()]
 
     @staticmethod
     def _league_columns(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """解析列定义：优先使用请求中的自定义列配置，否则返回默认的中文联赛排名列（含 CJK 标签）。"""
         columns = data.get("columns")
         if isinstance(columns, list) and columns:
             normalized = []
@@ -812,6 +850,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _league_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """解析行数据：优先使用请求中的自定义数据，否则生成默认的 CBA 联赛球队排名模拟数据。"""
         rows = data.get("rows")
         if isinstance(rows, list) and rows:
             return [row for row in rows if isinstance(row, dict)]
@@ -855,6 +894,7 @@ class TableSkill(BaseLegendSkill):
         columns: list[dict[str, Any]],
         rows: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        """自动计算联盟平均行：对所有数值列求算术平均值，团队名称列标记为"联盟平均"。"""
         average_row: dict[str, Any] = {}
         if not rows:
             return average_row
@@ -877,6 +917,7 @@ class TableSkill(BaseLegendSkill):
         average_row: dict[str, Any],
         theme: dict[str, str] | None = None,
     ) -> dict[str, dict[str, Any]]:
+        """构建渐变列配置：解析用户配置或自动推断，为每列计算中点值、扩散范围和方向。"""
         theme = theme or LEAGUE_TABLE_THEMES["clean_contrast"]
         has_gradient_config = "gradient_columns" in data or "gradients" in data
         raw = data.get("gradient_columns", data.get("gradients", {}))
@@ -902,13 +943,13 @@ class TableSkill(BaseLegendSkill):
                         config.pop("column", None)
                         configs[str(key)] = config
 
-        if not has_gradient_config:
+        if not has_gradient_config:                                 # 无显式配置时自动推断常见统计列
             column_keys = {str(column["key"]) for column in columns}
             if {"off_rating", "def_rating", "net_rating"}.issubset(column_keys):
                 configs = {
-                    "off_rating": {"higher_is_better": True},
-                    "def_rating": {"higher_is_better": False},
-                    "net_rating": {"higher_is_better": True},
+                    "off_rating": {"higher_is_better": True},       # 进攻得分越高越好
+                    "def_rating": {"higher_is_better": False},      # 防守失分越低越好
+                    "net_rating": {"higher_is_better": True},       # 净胜分越高越好
                 }
 
         for column in columns:
@@ -923,7 +964,7 @@ class TableSkill(BaseLegendSkill):
             if midpoint is None or not numeric_values:
                 continue
             configured_spread = TableSkill._to_float(config.get("max_deviation", config.get("spread")))
-            spread = configured_spread or max(abs(value - midpoint) for value in numeric_values) or 1.0
+            spread = configured_spread or max(abs(value - midpoint) for value in numeric_values) or 1.0  # 自动计算最大偏差
             higher_is_better = bool(config.get("higher_is_better", not bool(config.get("lower_is_better", False))))
             resolved[key] = {
                 "midpoint": midpoint,
@@ -942,6 +983,7 @@ class TableSkill(BaseLegendSkill):
         rows: list[dict[str, Any]],
         average_row: dict[str, Any],
     ) -> float | None:
+        """解析渐变中点值：支持直接数值、"average"/"mean"字符串或自动计算均值。"""
         raw_midpoint = config.get("midpoint", "average")
         numeric_midpoint = TableSkill._to_float(raw_midpoint)
         if numeric_midpoint is not None:
@@ -965,23 +1007,26 @@ class TableSkill(BaseLegendSkill):
         mid_color: str = "#f5f7fa",
         high_color: str = "#ff9400",
     ) -> str:
+        """计算发散渐变色值：以中点为基准，向两侧分别过渡到 low_color 和 high_color。"""
         if spread <= 0:
             return mid_color
-        distance = max(min((value - midpoint) / spread, 1.0), -1.0)
+        distance = max(min((value - midpoint) / spread, 1.0), -1.0)  # 归一化到 [-1, 1]
         if not higher_is_better:
-            distance *= -1.0
+            distance *= -1.0                                    # 反转方向
         if distance >= 0:
             return cmap_color([mid_color, high_color], distance)
         return cmap_color([mid_color, low_color], abs(distance))
 
     @staticmethod
     def _column_widths(columns: list[dict[str, Any]], left: float, right: float) -> list[float]:
+        """按列权重比例计算各列实际像素宽度。"""
         total_weight = sum(max(float(column.get("width", 1.0)), 0.001) for column in columns)
         available = right - left
         return [available * max(float(column.get("width", 1.0)), 0.001) / total_weight for column in columns]
 
     @staticmethod
     def _column_positions(columns: list[dict[str, Any]], left: float, right: float) -> list[float]:
+        """累积计算各列的起始 X 坐标位置。"""
         positions: list[float] = []
         cursor = left
         for width in TableSkill._column_widths(columns, left, right):
@@ -991,6 +1036,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _format_cell_value(value: Any, column: dict[str, Any], is_average: bool = False) -> str:
+        """格式化单元格数值：支持 int、float1、Python format-string 等格式规范。"""
         if value is None:
             return ""
         cell_format = column.get("average_format") if is_average and column.get("average_format") else column.get("format")
@@ -1011,6 +1057,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _left_image_config(data: dict[str, Any]) -> dict[str, Any] | None:
+        """解析左侧合成图片配置：验证路径有效性后返回完整配置字典。"""
         raw = data.get("left_image", data.get("left_image_path"))
         if raw is None:
             return None
@@ -1029,6 +1076,7 @@ class TableSkill(BaseLegendSkill):
 
     @staticmethod
     def _left_image_width(config: dict[str, Any], total_width: int) -> int:
+        """计算左侧图片占用的像素宽度：支持固定像素或比例两种模式，确保不超出安全范围。"""
         configured_pixels = TableSkill._to_float(config.get("width_px", config.get("width")))
         if configured_pixels is not None:
             side_width = int(configured_pixels)
@@ -1046,6 +1094,7 @@ class TableSkill(BaseLegendSkill):
         height: int,
         side_width: int,
     ) -> bytes:
+        """将左侧图片与右侧表格水平合成为一张完整图像：支持 contain/cover 适配模式和对齐方式。"""
         background = str(config.get("background", "#ffffff"))
         canvas = Image.new("RGBA", (total_width, height), background)
         table_image = Image.open(BytesIO(table_bytes)).convert("RGBA")
@@ -1067,8 +1116,8 @@ class TableSkill(BaseLegendSkill):
         elif align_y == "bottom":
             y = height - padding - fitted.height
         else:
-            y = padding + (box_h - fitted.height) // 2
-        x = padding + (box_w - fitted.width) // 2
+            y = padding + (box_h - fitted.height) // 2               # 默认垂直居中
+        x = padding + (box_w - fitted.width) // 2                   # 水平居中
         canvas.alpha_composite(fitted, (x, y))
 
         output = BytesIO()
@@ -1084,18 +1133,21 @@ class TableSkill(BaseLegendSkill):
         max_size: float,
         scale: float,
     ) -> float:
+        """自适应字体大小计算：基于画布宽度和行高的加权公式，限制在最小/最大范围内。"""
         row_pixels = row_h * height
         size = min(width / 82.0, row_pixels * scale)
         return max(min(size, max_size), min_size)
 
     @staticmethod
     def _draw_text(canvas, x: float, y: float, text: str, font: FontProperties | None, **kwargs: Any) -> None:
+        """统一文字绘制入口：若提供了字体对象则通过 fontproperties 参数传入。"""
         if font is not None:
             kwargs["fontproperties"] = font
         canvas.text(x, y, text, **kwargs)
 
     @staticmethod
     def _to_float(value: Any) -> float | None:
+        """安全类型转换：将任意值转为 float，bool 和 None 返回 None 以避免误判。"""
         if isinstance(value, bool) or value is None:
             return None
         try:
@@ -1106,6 +1158,7 @@ class TableSkill(BaseLegendSkill):
     @staticmethod
     @lru_cache(maxsize=1)
     def _cjk_font() -> FontProperties | None:
+        """加载系统中文字体（带缓存）：依次尝试微软雅黑、黑体、宋体、Noto Sans CJK。"""
         font_paths = (
             r"C:\Windows\Fonts\msyh.ttc",
             r"C:\Windows\Fonts\simhei.ttf",

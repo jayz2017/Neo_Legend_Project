@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Luxury Bar Chart (Neo Legend 华丽柱状图)"
+  short_description: "Tune `bar_chart` chart styling and data rules. (调优 `bar_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-bar-chart to tune the Neo Legend `bar_chart` renderer. (使用 $neo-legend-bar-chart 来调优 Neo Legend `bar_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

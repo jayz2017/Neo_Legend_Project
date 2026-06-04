@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Positive Negative Coordinate Chart (Neo Legend 正负四象限图)"
+  short_description: "Tune `plus_minus_coordinate` chart styling and data rules. (调优 `plus_minus_coordinate` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-plus-minus-coordinate to tune the Neo Legend `plus_minus_coordinate` renderer. (使用 $neo-legend-plus-minus-coordinate 来调优 Neo Legend `plus_minus_coordinate` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

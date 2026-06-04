@@ -1,6 +1,12 @@
-"""Luxury bar chart renderer skill with 4 stunning visual styles."""
-
 from __future__ import annotations
+
+"""
+奢华柱状图渲染器 (Luxury Bar Chart Renderer)
+==================================================
+功能：高端视觉风格柱状图，支持 glass_3d(玻璃3D)、neon_tubes(霓虹管)、gradient_sky(渐变天空)、crystal_pillars(水晶柱) 四种样式。
+特色：FancyBboxPatch 圆角柱体、垂直分段渐变填充、多层辉光/高光效果。
+"""
+
 
 from typing import Any
 
@@ -22,13 +28,30 @@ from neo_legend._plotting import (
     seeded_rng,
 )
 from neo_legend.base import BaseLegendSkill, StyleDefinition
+from neo_legend.report_style import (
+    add_footer,
+    add_report_axes,
+    draw_kpi_strip,
+    draw_report_background,
+    draw_report_header,
+    draw_series_legend,
+    format_metric,
+    gradient_colors,
+    lighten,
+    resolve_report_text,
+    resolve_report_theme,
+    style_cartesian_axes,
+    value_range,
+)
 
 
 class BarChartSkill(BaseLegendSkill):
-    legend_type = "bar_chart"
-    display_name = "Luxury Bar Chart"
-    default_style = "glass_3d"
-    default_size = (1179, 1454)
+    """奢华柱状图渲染器 — 4种奢华视觉风格的柱状图，支持分组/单系列模式。"""
+
+    legend_type = "bar_chart"             # 图例类型标识
+    display_name = "Luxury Bar Chart"     # 显示名称
+    default_style = "glass_3d"           # 默认样式：玻璃3D
+    default_size = (1179, 1454)          # 默认输出尺寸（宽 x 高）
     style_definitions = (
         StyleDefinition(
             "glass_3d",
@@ -49,16 +72,8 @@ class BarChartSkill(BaseLegendSkill):
     )
 
     _DEFAULT_PALETTE = [
-        "#ff6b6b",
-        "#4ecdc4",
-        "#45b7d1",
-        "#96ceb4",
-        "#ffeaa7",
-        "#dfe6e9",
-        "#fd79a8",
-        "#a29bfe",
-        "#6c5ce7",
-        "#00cec9",
+        "#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7",
+        "#dfe6e9", "#fd79a8", "#a29bfe", "#6c5ce7", "#00cec9",
     ]
 
     _NEON_PALETTE = ["#ff006e", "#8338ec", "#3a86ff", "#06ffa5", "#ffbe0b"]
@@ -72,33 +87,199 @@ class BarChartSkill(BaseLegendSkill):
     ]
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：解析样式与数据，构建报告风格图表。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         data = request.data or {}
 
-        fig = create_figure(width, height, self._bg_color(style))
+        theme = resolve_report_theme(data, style)
+        fig = create_figure(width, height, theme.background)
         canvas = add_canvas(fig)
-
-        self._draw_title(canvas, request)
-        self._draw_subtitle(canvas, request)
-
-        renderer = {
-            "glass_3d": self._render_glass_3d,
-            "neon_tubes": self._render_neon_tubes,
-            "gradient_sky": self._render_gradient_sky,
-            "crystal_pillars": self._render_crystal_pillars,
-        }[style]
-
-        renderer(fig, canvas, data, width, height)
-
-        add_reference_footer(
-            canvas,
-            "Neo Legend Luxury Bar Chart | Professional Data Visualization Artwork",
-            color=self._footer_color(style),
+        draw_report_background(canvas, theme)
+        report_text = resolve_report_text(
+            data,
+            request.title,
+            request.subtitle,
+            default_title="Performance Analytics",
+            default_subtitle="Ranked value comparison with benchmark context",
+            default_kicker="Bar Chart",
+            default_footer="NEO LEGEND | BAR CHART REPORT",
         )
+        draw_report_header(
+            canvas,
+            theme,
+            report_text.title,
+            report_text.subtitle,
+            report_text.kicker,
+            theme_label=report_text.theme_label,
+        )
+        self._render_report_bars(fig, canvas, data, theme)
+        add_footer(canvas, theme, report_text.footer)
         return self.result(save_png(fig), style)
 
+    def _render_report_bars(
+        self,
+        fig: plt.Figure,
+        canvas: plt.Axes,
+        data: dict[str, Any],
+        theme,
+    ) -> None:
+        """报告风格柱状图渲染：支持单系列和分组模式，绘制圆角渐变柱体及平均值参考线。"""
+        labels, values, colors, grouped = self._extract_data(data)
+        labels = [str(label) for label in labels]
+        rect = (0.075, 0.145, 0.86, 0.58)
+
+        if grouped:
+            all_values = np.array(
+                [float(value) for group in grouped for value in group.get("values", [])],
+                dtype=float,
+            )
+        else:
+            all_values = np.array([float(value) for value in values], dtype=float)
+        ymin, ymax = value_range(all_values)                         # 自动计算Y轴范围
+        yspan = ymax - ymin
+
+        draw_kpi_strip(
+            canvas,
+            theme,
+            [
+                ("max", format_metric(float(np.max(all_values))) if all_values.size else "0", theme.primary),
+                ("average", format_metric(float(np.mean(all_values))) if all_values.size else "0", theme.accent),
+                ("min", format_metric(float(np.min(all_values))) if all_values.size else "0", theme.secondary),
+            ],
+        )
+
+        ax = add_report_axes(fig, canvas, rect, theme)
+        x = np.arange(len(labels))
+
+        if grouped:
+            group_count = max(len(grouped), 1)
+            total_width = 0.74
+            bar_width = total_width / group_count * 0.82          # 分组内单柱宽度
+            legend_items: list[tuple[str, str]] = []
+            for group_index, group in enumerate(grouped):
+                raw_values = [float(value) for value in group.get("values", [])]
+                padded = np.array((raw_values + [0.0] * len(labels))[: len(labels)], dtype=float)
+                color = group.get("color") or theme.palette[group_index % len(theme.palette)]
+                positions = x - total_width / 2 + group_index * total_width / group_count + bar_width / 2
+                self._draw_report_bar_series(ax, positions, padded, bar_width, color, theme, yspan)
+                legend_items.append((str(group.get("label", f"Series {group_index + 1}")), color))
+            draw_series_legend(canvas, theme, legend_items)
+        else:
+            n = min(len(labels), len(values))
+            labels = labels[:n]
+            x = np.arange(n)
+            values_arr = np.array([float(value) for value in values[:n]], dtype=float)
+            bar_colors = self._resolve_colors(colors, n, list(theme.palette))
+            for idx, color in enumerate(bar_colors):
+                self._draw_report_bar_series(
+                    ax,
+                    np.array([x[idx]], dtype=float),
+                    np.array([values_arr[idx]], dtype=float),
+                    0.58,
+                    color,
+                    theme,
+                    yspan,
+                )
+
+        ax.set_xticks(np.arange(len(labels)))
+        ax.set_xticklabels(labels)
+        ax.set_ylim(ymin, ymax)
+        ax.margins(x=0.04)
+        style_cartesian_axes(
+            ax,
+            theme,
+            xlabel=str(data.get("x_label", "Categories")),
+            ylabel=str(data.get("y_label", "Value")),
+            x_rotation=0 if len(labels) <= 7 else 25,
+        )
+        if all_values.size:
+            avg = float(np.mean(all_values))                           # 平均值水平参考线
+            ax.axhline(avg, color=theme.accent, lw=1.4, ls=(0, (5, 4)), alpha=0.72)
+            ax.text(
+                len(labels) - 0.55,
+                avg + yspan * 0.018,
+                f"AVG {format_metric(avg)}",
+                color=theme.accent,
+                fontsize=9,
+                fontweight="bold",
+                ha="right",
+                va="bottom",
+            )
+
+    @staticmethod
+    def _draw_report_bar_series(
+        ax: plt.Axes,
+        positions: np.ndarray,
+        values: np.ndarray,
+        width: float,
+        color: str,
+        theme,
+        yspan: float,
+    ) -> None:
+        """绘制报告风格单组柱体：阴影底层 + 垂直渐变分段填充 + 圆角描边 + 数值标签。"""
+        steps = 24                                                    # 渐变分段数（越多越平滑）
+        for x_pos, value in zip(positions, values, strict=False):
+            value = float(value)
+            if np.isclose(value, 0.0):
+                continue
+            bottom = 0.0 if value >= 0 else value                      # 负值从数值位置开始向上画
+            height = abs(value)
+            ax.add_patch(
+                FancyBboxPatch(                                           # 阴影层：偏移的深色底座
+                    (x_pos - width / 2 + 0.035, bottom - yspan * 0.006),
+                    width,
+                    height,
+                    boxstyle="round,pad=0.0,rounding_size=0.035",
+                    facecolor="#000000",
+                    edgecolor="none",
+                    alpha=0.14,
+                    zorder=2,
+                )
+            )
+            colors = gradient_colors(lighten(color, 0.28), color, steps)   # 从亮到暗的垂直渐变色列表
+            for idx, seg_color in enumerate(colors):                       # 逐段绘制实现垂直渐变
+                y0 = value * idx / steps
+                y1 = value * (idx + 1) / steps
+                ax.add_patch(
+                    plt.Rectangle(
+                        (x_pos - width / 2, min(y0, y1)),
+                        width,
+                        abs(y1 - y0) + yspan * 0.0002,
+                        facecolor=seg_color,
+                        edgecolor="none",
+                        alpha=0.92,
+                        zorder=4,
+                    )
+                )
+            ax.add_patch(
+                FancyBboxPatch(                                               # 圆角描边轮廓
+                    (x_pos - width / 2, bottom),
+                    width,
+                    height,
+                    boxstyle="round,pad=0.0,rounding_size=0.035",
+                    facecolor="none",
+                    edgecolor=lighten(color, 0.42),
+                    linewidth=1.0,
+                    alpha=0.88,
+                    zorder=5,
+                )
+            )
+            label_y = value + (yspan * 0.022 if value >= 0 else -yspan * 0.035)
+            ax.text(
+                x_pos,
+                label_y,
+                format_metric(value),
+                color=theme.text,
+                fontsize=9,
+                fontweight="black",
+                ha="center",
+                va="bottom" if value >= 0 else "top",
+                zorder=7,
+            )
+
     def _bg_color(self, style: str) -> str:
+        """根据样式返回对应背景色。"""
         return {
             "glass_3d": "#1a1a2e",
             "neon_tubes": "#0a0a0a",
@@ -107,6 +288,7 @@ class BarChartSkill(BaseLegendSkill):
         }[style]
 
     def _footer_color(self, style: str) -> str:
+        """根据样式返回页脚文字颜色。"""
         if style == "neon_tubes":
             return "#444444"
         if style == "crystal_pillars":
@@ -114,6 +296,7 @@ class BarChartSkill(BaseLegendSkill):
         return "#8f8f8f"
 
     def _draw_title(self, canvas: plt.Axes, request: RenderRequest) -> None:
+        """绘制标题文字，各样式使用不同配色方案。"""
         title_text = (request.title or "Performance Analytics").title()
         title_config = {
             "glass_3d": {"color": "#f0f0f0", "fontsize": 48, "fontweight": "black"},
@@ -125,6 +308,7 @@ class BarChartSkill(BaseLegendSkill):
         canvas.text(0.5, 0.94, title_text, ha="center", va="center", **cfg)
 
     def _draw_subtitle(self, canvas: plt.Axes, request: RenderRequest) -> None:
+        """绘制副标题文字。"""
         sub_text = request.subtitle or "Luxury Data Visualization | Generated by Neo Legend"
         sub_config = {
             "glass_3d": {"color": "#a0a0b8", "fontsize": 15},
@@ -136,6 +320,7 @@ class BarChartSkill(BaseLegendSkill):
         canvas.text(0.5, 0.898, sub_text, ha="center", va="center", **cfg)
 
     def _extract_data(self, data: dict[str, Any]) -> tuple[list[str], list[float], list[str] | None, list[dict] | None]:
+        """提取标签、数值、颜色和分组数据；缺失时返回默认演示数据。"""
         labels = data.get("labels", ["Category A", "B", "C", "D", "E"])
         values = data.get("values", [85, 72, 90, 68, 75])
         colors = data.get("colors")
@@ -143,11 +328,13 @@ class BarChartSkill(BaseLegendSkill):
         return labels, values, colors, grouped
 
     def _resolve_colors(self, colors: list[str] | None, n: int, palette: list[str]) -> list[str]:
+        """解析颜色列表；不足时循环使用调色板补齐。"""
         if colors and len(colors) >= n:
             return colors[:n]
         return [palette[i % len(palette)] for i in range(n)]
 
     def _darken_color(self, hex_color: str, factor: float) -> str:
+        """颜色加深：RGB 各通道乘以 factor（0~1）。"""
         hex_color = hex_color.lstrip("#")
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
@@ -158,6 +345,7 @@ class BarChartSkill(BaseLegendSkill):
         return f"#{r:02x}{g:02x}{b:02x}"
 
     def _lighten_color(self, hex_color: str, factor: float) -> str:
+        """颜色提亮：向白色方向混合 factor 比例。"""
         hex_color = hex_color.lstrip("#")
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
@@ -172,6 +360,7 @@ class BarChartSkill(BaseLegendSkill):
     def _render_glass_3d(
         self, fig: plt.Figure, canvas: plt.Axes, data: dict[str, Any], width: int, height: int
     ) -> None:
+        """玻璃3D样式：暗色背景、圆角渐变柱体、左侧高光条、顶部椭圆盖。"""
         labels, values, colors, grouped = self._extract_data(data)
         ax = fig.add_axes([0.10, 0.12, 0.82, 0.70], facecolor="#1a1a2e")
 
@@ -194,6 +383,7 @@ class BarChartSkill(BaseLegendSkill):
     def _draw_single_glass_bars(
         self, ax: plt.Axes, labels: list[str], values: list[float], colors: list[str]
     ) -> None:
+        """单系列玻璃柱体：暗色阴影底 + 分段渐变填充 + 左侧高光 + 顶部椭圆封口。"""
         n = len(labels)
         x_pos = np.arange(n)
         bar_width = 0.60
@@ -207,7 +397,7 @@ class BarChartSkill(BaseLegendSkill):
             y_c = 0.03
 
             dark_col = self._darken_color(col, 0.30)
-            shadow = FancyBboxPatch(
+            shadow = FancyBboxPatch(                                   # 深色偏移阴影层
                 (x_c + 0.04, y_c - 0.04),
                 bw,
                 bar_h,
@@ -220,11 +410,11 @@ class BarChartSkill(BaseLegendSkill):
             ax.add_patch(shadow)
 
             cmap = make_gradient([col, self._lighten_color(col, 0.55)], f"glass_{i}")
-            for seg in range(24):
+            for seg in range(24):                                       # 24段垂直渐变
                 seg_y = y_c + seg / 24 * bar_h
                 seg_h = bar_h / 24 + 0.001
                 ratio = seg / 23
-                seg_alpha = 0.90 - ratio * 0.50
+                seg_alpha = 0.90 - ratio * 0.50                     # 底部更透明（玻璃通透感）
                 seg_col = cmap(ratio)
                 seg_patch = FancyBboxPatch(
                     (x_c, seg_y),
@@ -238,7 +428,7 @@ class BarChartSkill(BaseLegendSkill):
                 )
                 ax.add_patch(seg_patch)
 
-            highlight = FancyBboxPatch(
+            highlight = FancyBboxPatch(                               # 左侧白色高光条（模拟玻璃反光）
                 (x_c + 0.01, y_c),
                 0.025,
                 bar_h,
@@ -250,7 +440,7 @@ class BarChartSkill(BaseLegendSkill):
             )
             ax.add_patch(highlight)
 
-            top_ell = Ellipse(
+            top_ell = Ellipse(                                          # 顶部椭圆封口（模拟圆柱截面）
                 (x_c + bw / 2, y_c + bar_h),
                 width=bw * 0.95,
                 height=0.028,
@@ -279,6 +469,7 @@ class BarChartSkill(BaseLegendSkill):
         ax.set_ylim(0, 1.0)
 
     def _draw_grouped_glass(self, ax: plt.Axes, grouped: list[dict], labels: list[str]) -> None:
+        """分组玻璃柱体：每组独立着色，共享相同的阴影/高光/封口处理逻辑。"""
         n_groups = len(labels)
         n_series = len(grouped)
         group_width = 0.72
@@ -361,6 +552,7 @@ class BarChartSkill(BaseLegendSkill):
     def _render_neon_tubes(
         self, fig: plt.Figure, canvas: plt.Axes, data: dict[str, Any], width: int, height: int
     ) -> None:
+        """霓虹管样式：纯黑背景、多层发光边框柱体、环境光晕装饰。"""
         labels, values, colors, grouped = self._extract_data(data)
         ax = fig.add_axes([0.10, 0.12, 0.82, 0.70], facecolor="#0a0a0a")
 
@@ -381,16 +573,18 @@ class BarChartSkill(BaseLegendSkill):
         ax.grid(axis="y", linestyle="--", alpha=0.08, color="#444444")
 
     def _draw_neon_ambient_glow(self, canvas: plt.Axes) -> None:
+        """绘制中心辐射环境光晕：多层同心椭圆模拟霓虹灯氛围。"""
         n_rings = 40
         for i in range(n_rings, 0, -1):
             r = i / n_rings * 0.7
-            alpha = 0.012 * (1 - i / n_rings)
+            alpha = 0.012 * (1 - i / n_rings)                   # 外圈更淡
             ell = Ellipse((0.5, 0.50), r * 1.6, r * 1.1, facecolor="#333366", edgecolor="none", alpha=alpha, zorder=0)
             canvas.add_patch(ell)
 
     def _draw_neon_bars(
         self, ax: plt.Axes, labels: list[str], values: list[float], colors: list[str]
     ) -> None:
+        """霓虹管柱体：多层线宽边框产生辉光效果 + 半透明内核。"""
         n = len(labels)
         x_pos = np.arange(n)
         max_val = max(values) * 1.2
@@ -432,6 +626,7 @@ class BarChartSkill(BaseLegendSkill):
         ax.set_ylim(0, 1.0)
 
     def _draw_grouped_neon(self, ax: plt.Axes, grouped: list[dict], labels: list[str]) -> None:
+        """分组霓虹管柱体。"""
         n_groups = len(labels)
         n_series = len(grouped)
         group_width = 0.70
@@ -474,6 +669,7 @@ class BarChartSkill(BaseLegendSkill):
     def _render_gradient_sky(
         self, fig: plt.Figure, canvas: plt.Axes, data: dict[str, Any], width: int, height: int
     ) -> None:
+        """渐变天空样式：日落色天空背景、云朵装饰、每根柱子独立双色渐变。"""
         labels, values, colors, grouped = self._extract_data(data)
         self._draw_sky_background(canvas)
 
@@ -496,12 +692,14 @@ class BarChartSkill(BaseLegendSkill):
         self._draw_cloud_decorations(canvas)
 
     def _draw_sky_background(self, canvas: plt.Axes) -> None:
+        """绘制天空渐变背景：从深蓝到白色的多段线性渐变。"""
         sky_grad = np.linspace(0, 1, 256).reshape(-1, 1)
         sky_colors = ["#2c3e50", "#3498db", "#5dade2", "#85c1e9", "#aed6f1", "#d4e6f1", "#ecf0f1"]
         cmap = make_gradient(sky_colors, "sky_bg")
         canvas.imshow(sky_grad.T, aspect="auto", extent=[0, 1, 0, 1], cmap=cmap, zorder=0)
 
     def _draw_cloud_decorations(self, canvas: plt.Axes) -> None:
+        """绘制漂浮云朵装饰元素（双层椭圆叠加）。"""
         cloud_positions = [(0.12, 0.76), (0.78, 0.79), (0.35, 0.81), (0.62, 0.77)]
         for cx, cy in cloud_positions:
             cloud = Ellipse((cx, cy), 0.12, 0.04, facecolor="#ffffff", edgecolor="none", alpha=0.10, zorder=0)
@@ -512,6 +710,7 @@ class BarChartSkill(BaseLegendSkill):
     def _draw_sky_bars(
         self, ax: plt.Axes, labels: list[str], values: list[float], colors: list[str]
     ) -> None:
+        """天空渐变柱体：每根柱子使用独立的日落双色渐变（如红→橙、黄→橙等）。"""
         n = len(labels)
         x_pos = np.arange(n)
         max_val = max(values) * 1.2
@@ -560,6 +759,7 @@ class BarChartSkill(BaseLegendSkill):
         ax.set_ylim(0, 1.0)
 
     def _draw_grouped_sky(self, ax: plt.Axes, grouped: list[dict], labels: list[str]) -> None:
+        """分组天空渐变柱体。"""
         n_groups = len(labels)
         n_series = len(grouped)
         group_width = 0.70
@@ -607,6 +807,7 @@ class BarChartSkill(BaseLegendSkill):
     def _render_crystal_pillars(
         self, fig: plt.Figure, canvas: plt.Axes, data: dict[str, Any], width: int, height: int
     ) -> None:
+        """水晶柱样式：深蓝背景、冰蓝渐变柱体、内部折射纹理线条、金色数值标签。"""
         labels, values, colors, grouped = self._extract_data(data)
         ax = fig.add_axes([0.10, 0.12, 0.82, 0.70], facecolor="#0d1b2a")
 
@@ -627,11 +828,12 @@ class BarChartSkill(BaseLegendSkill):
     def _draw_crystal_bars(
         self, ax: plt.Axes, labels: list[str], values: list[float], colors: list[str]
     ) -> None:
+        """水晶柱体：暗色基座 + 冰蓝渐变主体 + 折射横纹 + 高光区域 + 金色标签。"""
         n = len(labels)
         x_pos = np.arange(n)
         max_val = max(values) * 1.2
 
-        crystal_grad = ["#a8dadc", "#cce5e8", "#e8f0f2", "#f1faee"]
+        crystal_grad = ["#a8dadc", "#cce5e8", "#e8f0f2", "#f1faee"]       # 冰蓝色系渐变
 
         for i, (x, val, col) in enumerate(zip(x_pos, values, colors)):
             bar_h = val / max_val * 0.84
@@ -639,7 +841,7 @@ class BarChartSkill(BaseLegendSkill):
             x_c = x - bw / 2
             y_c = 0.025
 
-            base = FancyBboxPatch(
+            base = FancyBboxPatch(                                    # 暗色底部基座
                 (x_c - 0.015, y_c - 0.018),
                 bw + 0.03,
                 0.025,
@@ -665,7 +867,7 @@ class BarChartSkill(BaseLegendSkill):
             ax.add_patch(main_bar)
 
             n_seg = 20
-            for seg in range(n_seg):
+            for seg in range(n_seg):                                  # 分段渐变覆盖
                 seg_y = y_c + seg / n_seg * bar_h
                 seg_h = bar_h / n_seg + 0.001
                 ratio = seg / (n_seg - 1)
@@ -682,7 +884,7 @@ class BarChartSkill(BaseLegendSkill):
                 ax.add_patch(sp)
 
             step_px = 0.020
-            for di in np.arange(0, bar_h, step_px):
+            for di in np.arange(0, bar_h, step_px):                  # 内部折射横纹（模拟晶体内部光线）
                 ly = y_c + di
                 lx_start = x_c + 0.02
                 lx_end = x_c + bw - 0.02
@@ -695,7 +897,7 @@ class BarChartSkill(BaseLegendSkill):
                     zorder=4,
                 )
 
-            gloss_h = bar_h * 0.28
+            gloss_h = bar_h * 0.28                                   # 右上角高光区域
             gloss = FancyBboxPatch(
                 (x_c + 0.015, y_c + bar_h - gloss_h),
                 bw * 0.28,
@@ -708,7 +910,7 @@ class BarChartSkill(BaseLegendSkill):
             )
             ax.add_patch(gloss)
 
-            edge_highlight = FancyBboxPatch(
+            edge_highlight = FancyBboxPatch(                          # 圆角描边轮廓
                 (x_c, y_c),
                 bw,
                 bar_h,
@@ -729,7 +931,7 @@ class BarChartSkill(BaseLegendSkill):
                 va="bottom",
                 fontsize=13,
                 fontweight="bold",
-                color="#ffd700",
+                color="#ffd700",                                     # 金色数值标签
                 zorder=10,
             )
 
@@ -739,6 +941,7 @@ class BarChartSkill(BaseLegendSkill):
         ax.set_ylim(0, 1.0)
 
     def _draw_grouped_crystal(self, ax: plt.Axes, grouped: list[dict], labels: list[str]) -> None:
+        """分组水晶柱体。"""
         n_groups = len(labels)
         n_series = len(grouped)
         group_width = 0.70

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Animated Court Shooting Terrain (Neo Legend 动态球场图)"
+  short_description: "Tune `court_shot_animation` chart styling and data rules. (调优 `court_shot_animation` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-court-shot-animation to tune the Neo Legend `court_shot_animation` renderer. (使用 $neo-legend-court-shot-animation 来调优 Neo Legend `court_shot_animation` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

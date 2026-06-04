@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+"""
+坐标气泡图渲染器 (Coordinate Bubble Chart Renderer)
+====================================================
+功能：生成 NBA 风格的得分者气泡图，X 轴为投篮量、Y 轴为效率（eFG%），气泡大小代表综合影响力。
+依赖：matplotlib, numpy
+"""
+
 """Dark coordinate bubble chart renderer skill."""
 
-from __future__ import annotations
 
 from typing import Any
 
@@ -12,11 +20,13 @@ from neo_legend.base import BaseLegendSkill, StyleDefinition
 
 
 class CoordinateSkill(BaseLegendSkill):
-    legend_type = "coordinate"
+    """坐标气泡图渲染器 — 以散点图形式展示球员的投篮量与效率关系，气泡大小表示综合数据。"""
+
+    legend_type = "coordinate"             # 图例类型标识符
     display_name = "Coordinate Bubble Chart"
-    default_style = "dark_bubble"
-    default_size = (1179, 1463)
-    style_definitions = (
+    default_style = "dark_bubble"           # 默认样式：深色气泡图
+    default_size = (1179, 1463)             # 默认输出尺寸
+    style_definitions = (                   # 样式定义元组
         StyleDefinition(
             "dark_bubble",
             "Dark NBA scorer bubble chart with labels and average line.",
@@ -26,6 +36,7 @@ class CoordinateSkill(BaseLegendSkill):
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：绘制标题、NBA 标签、气泡散点图和联盟平均参考线。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         fig = create_figure(width, height, "#171b27")
@@ -49,26 +60,26 @@ class CoordinateSkill(BaseLegendSkill):
 
         ax = fig.add_axes([0.075, 0.11, 0.86, 0.73], facecolor="#171b27")
         points = self._points(request.data)
-        x = np.array([point["x"] for point in points], dtype=float)
-        y = np.array([point["y"] for point in points], dtype=float)
-        sizes = np.array([point["size"] for point in points], dtype=float)
+        x = np.array([point["x"] for point in points], dtype=float)   # X 轴：每百回合投篮次数
+        y = np.array([point["y"] for point in points], dtype=float)   # Y 轴：eFG%
+        sizes = np.array([point["size"] for point in points], dtype=float)  # 气泡尺寸
         labels = [str(point["label"]) for point in points]
         cmap = (
             make_gradient(["#355cce", "#e51aa7", "#ff3e35", "#ffe600"], "scorers")
             if style == "dark_bubble"
-            else make_gradient(["#3e5ed0", "#e63b75", "#ff8b25", "#fff04a"], "gold_scorers")
+            else make_gradient(["#3e5ed0", "#e63b75", "#ff8b25", "#fff04a"], "gold_scorers")  # 根据样式选择渐变色
         )
         ax.scatter(x, y, s=sizes, c=y, cmap=cmap, alpha=0.94, edgecolor="#ffffff", linewidth=0.55)
 
         for xi, yi, label in zip(x, y, labels, strict=True):
-            dx = 0.15 if xi < 27 else -0.15
+            dx = 0.15 if xi < 27 else -0.15                      # 根据位置决定标签偏移方向
             ha = "left" if dx > 0 else "right"
             ax.text(xi + dx, yi, label, color="#f7f7f8", fontsize=12, ha=ha, va="center")
 
-        ax.axhline(54, color="#a9aab4", lw=1, linestyle=(0, (3, 4)), alpha=0.55)
+        ax.axhline(54, color="#a9aab4", lw=1, linestyle=(0, (3, 4)), alpha=0.55)  # 联盟平均 eFG% 参考线
         ax.text(30.45, 54, "NBA\nAVG.", color="#f5f5f5", fontsize=12, ha="left", va="center")
-        ax.set_xlim(18.5, 31.5)
-        ax.set_ylim(45.5, 66.2)
+        ax.set_xlim(18.5, 31.5)                                  # X 轴范围：限制在合理投篮区间
+        ax.set_ylim(45.5, 66.2)                                  # Y 轴范围：限制在合理效率区间
         ax.set_xlabel(
             "Field Goal Attempts Per 100 Possessions",
             color="#ffffff",
@@ -78,15 +89,16 @@ class CoordinateSkill(BaseLegendSkill):
             style="italic",
         )
         ax.set_ylabel("eFG%", color="#ffffff", fontsize=24, fontweight="bold")
-        ax.tick_params(colors="#ffffff", labelsize=20, length=0)
+        ax.tick_params(colors="#ffffff", labelsize=20, length=0)  # 刻度线隐藏，仅显示文字
         for spine in ["left", "bottom"]:
-            ax.spines[spine].set_color("#ffffff")
+            ax.spines[spine].set_color("#ffffff")                # 显示左下边框
         for spine in ["right", "top"]:
-            ax.spines[spine].set_visible(False)
+            ax.spines[spine].set_visible(False)                  # 隐藏右上边框
         return self.result(save_png(fig), style)
 
     @staticmethod
     def _points(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """解析气泡点数据：优先使用请求中的自定义数据，否则生成默认的 NBA 球员模拟数据。"""
         raw_points = data.get("points")
         if isinstance(raw_points, list) and raw_points:
             return [point for point in raw_points if isinstance(point, dict)]
@@ -115,9 +127,9 @@ class CoordinateSkill(BaseLegendSkill):
         return [
             {
                 "label": name,
-                "x": float(rng.uniform(19, 31)),
-                "y": float(rng.uniform(47, 60) + (6 if index == 0 else 0)),
-                "size": float(rng.uniform(120, 2100)),
+                "x": float(rng.uniform(19, 31)),                 # 随机投篮量 [19, 31]
+                "y": float(rng.uniform(47, 60) + (6 if index == 0 else 0)),  # 随机效率值，Jokic 加成 +6
+                "size": float(rng.uniform(120, 2100)),            # 随机气泡大小
             }
             for index, name in enumerate(names)
         ]

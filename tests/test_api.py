@@ -199,7 +199,20 @@ def test_render_sankey_chart_via_api(client):
 def test_legend_types_includes_new_types(client):
     response = client.get("/legend-types")
     types = [item["legend_type"] for item in response.json()]
-    new_types = ["radar_chart", "dual_radar_chart", "bar_chart", "combo_chart", "bubble_chart", "sankey_chart"]
+    new_types = [
+        "radar_chart",
+        "dual_radar_chart",
+        "bar_chart",
+        "line_chart",
+        "combo_chart",
+        "bubble_chart",
+        "sankey_chart",
+        "calendar_chart",
+        "matrix_bubble_chart",
+        "chord_chart",
+        "scatter_matrix_chart",
+        "stacked_bar_chart",
+    ]
     for t in new_types:
         assert t in types
 

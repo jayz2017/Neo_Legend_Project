@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Total Points By Location (Neo Legend 总分位置热力图)"
+  short_description: "Tune `points_location` chart styling and data rules. (调优 `points_location` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-points-location to tune the Neo Legend `points_location` renderer. (使用 $neo-legend-points-location 来调优 Neo Legend `points_location` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

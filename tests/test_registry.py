@@ -21,9 +21,15 @@ def test_registry_lists_all_readme_legend_types(registry) -> None:
         "radar_chart",
         "dual_radar_chart",
         "bar_chart",
+        "line_chart",
         "combo_chart",
         "bubble_chart",
         "sankey_chart",
+        "calendar_chart",
+        "matrix_bubble_chart",
+        "chord_chart",
+        "scatter_matrix_chart",
+        "stacked_bar_chart",
     }
 
 

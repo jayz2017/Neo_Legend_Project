@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Heatmap Ranking Table (Neo Legend 表格图)"
+  short_description: "Tune `table` chart styling and data rules. (调优 `table` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-table to tune the Neo Legend `table` renderer. (使用 $neo-legend-table 来调优 Neo Legend `table` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

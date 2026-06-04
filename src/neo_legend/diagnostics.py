@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """Image diagnostics, comparison, and automatic post-render tuning."""
 
-from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from io import BytesIO

@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+"""
+玫瑰环形图渲染器 (Rose Donut Chart Renderer)
+=============================================
+功能：生成 NBA 乐透选秀权分配的对比环形图，支持当前系统与提案方案的并排比较。
+依赖：matplotlib, numpy
+"""
+
 """Rose and donut chart renderer skill."""
 
-from __future__ import annotations
 
 from typing import Any
 
@@ -13,11 +21,13 @@ from neo_legend.base import BaseLegendSkill, StyleDefinition
 
 
 class RoseSkill(BaseLegendSkill):
-    legend_type = "rose"
+    """玫瑰环形图渲染器 — 以甜甜圈图形式展示乐透球队选秀概率分布，支持当前/提案双方案对比。"""
+
+    legend_type = "rose"                    # 图例类型标识符
     display_name = "Rose Donut Chart"
-    default_style = "proposal_comparison"
-    default_size = (1179, 1459)
-    style_definitions = (
+    default_style = "proposal_comparison"     # 默认样式：提案对比（双环）
+    default_size = (1179, 1459)               # 默认输出尺寸
+    style_definitions = (                     # 样式定义元组
         StyleDefinition(
             "proposal_comparison",
             "Black-background current/proposed lottery donut comparison.",
@@ -27,6 +37,7 @@ class RoseSkill(BaseLegendSkill):
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：绘制标题、一个或两个环形图、颜色图例和底部说明。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         fig = create_figure(width, height, "#030303")
@@ -54,14 +65,14 @@ class RoseSkill(BaseLegendSkill):
             self._draw_donut(fig, [14, 14, 14, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1], [0.25, 0.28, 0.50, 0.50], "14")
             canvas.text(0.61, 0.56, "Current system", color="#ffffff", fontsize=30, fontweight="black")
         else:
-            self._draw_donut(fig, self._current_values(request.data), [0.25, 0.54, 0.42, 0.30], "14")
-            self._draw_donut(fig, self._proposed_values(request.data), [0.27, 0.17, 0.40, 0.30], "18")
+            self._draw_donut(fig, self._current_values(request.data), [0.25, 0.54, 0.42, 0.30], "14")      # 当前系统的环形图（上方）
+            self._draw_donut(fig, self._proposed_values(request.data), [0.27, 0.17, 0.40, 0.30], "18")   # 提案系统的环形图（下方）
             canvas.text(0.61, 0.70, "Current system", color="#ffffff", fontsize=30, fontweight="black")
-            canvas.text(0.62, 0.48, "14 lottery teams", color="#e7e3dc", fontsize=16)
-            canvas.text(0.62, 0.44, "Bottom 3 anchored at 14%", color="#e7e3dc", fontsize=16)
+            canvas.text(0.62, 0.56, "14 lottery teams", color="#e7e3dc", fontsize=16)
+            canvas.text(0.62, 0.52, "Bottom 3 anchored at 14%", color="#e7e3dc", fontsize=16)              # 当前系统说明
             canvas.text(0.60, 0.38, "Proposed system", color="#ffffff", fontsize=32, fontweight="black")
             canvas.text(0.62, 0.16, "18 lottery teams", color="#e7e3dc", fontsize=16)
-            canvas.text(0.62, 0.12, "Bottom 10 flattened to 8%", color="#e7e3dc", fontsize=16)
+            canvas.text(0.62, 0.12, "Bottom 10 flattened to 8%", color="#e7e3dc", fontsize=16)             # 提案系统说明
 
         self._draw_color_scale(canvas)
         canvas.text(
@@ -76,30 +87,32 @@ class RoseSkill(BaseLegendSkill):
 
     @staticmethod
     def _draw_donut(fig, values: list[float], rect: list[float], center_text: str) -> None:
+        """绘制单个甜甜圈环形图：根据值列表生成彩色扇区，中心显示球队数量，外围标注百分比或排名。"""
         ax = fig.add_axes(rect, facecolor="#030303")
-        gradient = ["#ff202d", "#ffb12f", "#f6e85a", "#5fd68b", "#55b7f7", "#7377ff"]
+        gradient = ["#ff202d", "#ffb12f", "#f6e85a", "#5fd68b", "#55b7f7", "#7377ff"]  # 从差到好的颜色渐变
         colors = [cmap_color(gradient, i / len(values)) for i in range(len(values))]
         wedges, _ = ax.pie(
             values,
             startangle=90,
             counterclock=False,
             colors=colors,
-            wedgeprops={"width": 0.34, "edgecolor": "#030303", "linewidth": 2.2},
+            wedgeprops={"width": 0.34, "edgecolor": "#030303", "linewidth": 2.2},  # 环形宽度 34%
         )
         total = sum(values)
         for index, wedge in enumerate(wedges, start=1):
-            angle = np.deg2rad((wedge.theta1 + wedge.theta2) / 2)
-            label = f"{values[index - 1]:g}%"
+            angle = np.deg2rad((wedge.theta1 + wedge.theta2) / 2)  # 扇区中点角度
+            label = f"{values[index - 1]:g}%"                       # 百分比标签
             if values[index - 1] <= 4:
-                label = str(index)
+                label = str(index)                                   # 小扇区显示排名数字
             ax.text(1.14 * np.cos(angle), 1.14 * np.sin(angle), label, color=colors[index - 1], fontsize=9, ha="center")
-        ax.text(0, 0.05, center_text, color="#ffffff", fontsize=30, fontweight="black", ha="center")
-        ax.text(0, -0.17, "Lottery Teams", color="#ffffff", fontsize=18, fontweight="bold", ha="center")
+        ax.text(0, 0.05, center_text, color="#ffffff", fontsize=30, fontweight="black", ha="center")  # 中心文字：球队数
+        ax.text(0, -0.17, "Lottery Teams", color="#ffffff", fontsize=18, fontweight="bold", ha="center")  # 中心副标题
         ax.set_aspect("equal")
         ax.set_axis_off()
 
     @staticmethod
     def _draw_color_scale(canvas) -> None:
+        """绘制底部颜色渐变图例条，标注"最差战绩"到"较好记录"。"""
         colors = ["#ff202d", "#ff8b24", "#f7d448", "#5fd68b", "#4fb1f0", "#6b7dff"]
         x0, y0, w, h = 0.18, 0.075, 0.64, 0.012
         for index, color in enumerate(colors):
@@ -111,12 +124,14 @@ class RoseSkill(BaseLegendSkill):
 
     @staticmethod
     def _current_values(data: dict[str, Any]) -> list[float]:
+        """获取当前乐透系统的概率分布值列表，默认使用不均匀的 14 队梯形分布（前 3 队各 14%）。"""
         values = data.get("current_values")
         default_values = [14, 14, 14, 11.5, 11.5, 9, 6.8, 6.7, 4.5, 3, 2, 1.5, 1, 0.5]
         return values if isinstance(values, list) and values else default_values
 
     @staticmethod
     def _proposed_values(data: dict[str, Any]) -> list[float]:
+        """获取提案乐透系统的概率分布值列表，默认使用均匀的 18 队扁平化分布（前 10 队各 8%，后 8 队各 2.5%）。"""
         values = data.get("proposed_values")
         default_values = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5]
         return values if isinstance(values, list) and values else default_values

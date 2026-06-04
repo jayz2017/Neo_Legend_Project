@@ -1,490 +1,418 @@
-"""Luxury Sankey Diagram / Flow Chart renderer skill."""
-
 from __future__ import annotations
+
+"""
+奢华桑基图渲染器 (Luxury Sankey Diagram Renderer)
+==================================================
+功能：流向可视化桑基图，支持 neon_flow(霓虹流)、crystal_stream(水晶流)、sunset_ribbon(日落丝带)、ocean_current(洋流) 四种样式。
+特色：9 点三次贝塞尔曲线流带、多层辉光效果、节点渐变填充、流量标注。
+"""
+
 
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Ellipse as MplEllipse, FancyBboxPatch, PathPatch
+from matplotlib.patches import FancyBboxPatch, PathPatch
 from matplotlib.path import Path
 
 from neo_legend.models import RenderRequest, RenderResult
 from neo_legend._plotting import (
     add_canvas,
     add_reference_footer,
-    cmap_color,
     create_figure,
     save_png,
 )
 from neo_legend.base import BaseLegendSkill, StyleDefinition
+from neo_legend.report_style import (
+    add_footer,
+    add_report_axes,
+    draw_kpi_strip,
+    draw_report_background,
+    draw_report_header,
+    format_metric,
+    resolve_report_text,
+    resolve_report_theme,
+    style_cartesian_axes,  # 坐标轴样式化函数
+)
 
 
 class SankeyChartSkill(BaseLegendSkill):
-    legend_type = "sankey_chart"
-    display_name = "Luxury Sankey Diagram"
-    default_style = "neon_streams"
-    default_size = (1400, 1000)
+    """奢华桑基图渲染器 — 流向关系可视化，支持 4 种奢华视觉风格的贝塞尔曲线流带。"""
+
+    legend_type = "sankey_chart"             # 图例类型标识
+    display_name = "Luxury Sankey Diagram"   # 显示名称
+    default_style = "neon_streams"          # 默认样式：霓虹流光
+    default_size = (1400, 1000)             # 默认输出尺寸（宽 x 高）
     style_definitions = (
         StyleDefinition(
             "neon_streams",
-            "Neon glow flow bands on dark tech background.",
+            "Neon glow flow bands on dark tech background with luminous nodes.",  # 霓虹流光：暗色科技背景+发光节点
         ),
         StyleDefinition(
             "energy_flow",
-            "Heat-map colored energy flow with particle effects.",
+            "Heat-map colored energy flow with particle effects and warm nodes.",  # 能量流动：热力配色+粒子效果
         ),
         StyleDefinition(
             "crystal_rivers",
-            "Transparent gradient ice-blue river flows.",
+            "Alpha-gradient transparent flow bands with refraction texture lines.",  # 晶体河流：透明渐变流带+折射纹理
         ),
         StyleDefinition(
             "golden_paths",
-            "Luxurious gold-toned flow paths with radiant nodes.",
+            "Golden multi-layer glow flow bands with ornate rectangular nodes.",   # 黄金之路：金色多层辉光+华丽矩形节点
         ),
     )
 
-    _NEON_COLORS = ["#ff0055", "#00ff99", "#00ccff", "#ffcc00", "#ff00ff", "#ff6b35", "#7b68ee"]
-    _ENERGY_COLORS_COLD = ["#0077b6", "#00b4d8", "#48cae4", "#90e0ef"]
-    _ENERGY_COLORS_HOT = ["#ffb703", "#fb8500", "#e63946"]
-    _CRYSTAL_COLORS = ["#caf0f8", "#90e0ef", "#00b4d8", "#0077b6", "#023e8a"]
-    _GOLDEN_COLORS = ["#FFD700", "#FFA500", "#FF8C00", "#B8860B", "#DAA520"]
-
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：解析数据与样式，构建报告风格桑基图。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
-        bg = self._bg_color(style)
-        fig = create_figure(width, height, bg)
+        data = self._extract_data(request.data or {})
+        theme = resolve_report_theme(request.data or {}, style)
+
+        fig = create_figure(width, height, theme.background)
         canvas = add_canvas(fig)
+        draw_report_background(canvas, theme)
 
-        data = self._resolve_data(request.data)
-        nodes, flows = self._prepare_layout(data)
+        report_text = resolve_report_text(
+            request.data or {},
+            request.title,
+            request.subtitle,
+            default_title="Flow Analysis",
+            default_subtitle="Source → Target volume distribution",
+            default_kicker="Sankey Diagram",
+            default_footer="NEO LEGEND | SANKEY DIAGRAM REPORT",
+        )
+        draw_report_header(
+            canvas,
+            theme,
+            report_text.title,
+            report_text.subtitle,
+            report_text.kicker,
+            theme_label=report_text.theme_label,
+        )
 
-        self._draw_title(canvas, request.title, request.subtitle, style)
-        self._draw_decorations(canvas, style)
+        total_value = sum(link["value"] for link in data["links"])
+        source_count = len(data["sources"])
+        target_count = len(data["targets"])
 
-        renderer = {
-            "neon_streams": self._render_neon,
-            "energy_flow": self._render_energy,
-            "crystal_rivers": self._render_crystal,
-            "golden_paths": self._render_golden,
-        }[style]
-        renderer(canvas, nodes, flows)
+        draw_kpi_strip(
+            canvas,
+            theme,
+            [
+                ("total flow", format_metric(total_value), theme.primary),
+                ("sources", str(source_count), theme.accent),
+                ("targets", str(target_count), theme.secondary),
+            ],
+        )
 
-        add_reference_footer(canvas, "FLOW ANALYSIS | NEO LEGEND")
+        ax = add_report_axes(fig, canvas, (0.05, 0.12, 0.90, 0.68), theme)
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
+        style_cartesian_axes(ax, theme)
+        ax.set_axis_off()
+
+        node_positions: dict[str, tuple[float, float]] = {}
+        self._layout_nodes(ax, data["sources"], data["targets"], node_positions)
+        self._draw_links(ax, data["links"], data["sources"], data["targets"], node_positions, style, theme)
+        self._draw_nodes(ax, data["sources"], data["targets"], node_positions, style, theme)
+        self._draw_link_labels(ax, data["links"], data["sources"], data["targets"], node_positions, theme)
+
+        add_footer(canvas, theme, report_text.footer)
         return self.result(save_png(fig), style)
 
-    # ── data & layout ──────────────────────────────────────────────
+    @staticmethod
+    def _extract_data(data: dict[str, Any]) -> dict[str, Any]:
+        """提取源/目标/链接数据；缺失时返回默认演示桑基图数据。"""
+        if data.get("links") and data.get("sources") and data.get("targets"):
+            return {
+                "sources": data["sources"],
+                "targets": data["targets"],
+                "links": data["links"],
+            }
+
+        sources = ["Website", "Mobile App", "Social Media", "Email", "Direct"]
+        targets = ["Sign Up", "Purchase", "Upgrade"]
+        links = [
+            {"source": "Website", "target": "Sign Up", "value": 450},
+            {"source": "Website", "target": "Purchase", "value": 280},
+            {"source": "Mobile App", "target": "Sign Up", "value": 320},
+            {"source": "Mobile App", "target": "Purchase", "value": 190},
+            {"source": "Mobile App", "target": "Upgrade", "value": 85},
+            {"source": "Social Media", "target": "Sign Up", "value": 210},
+            {"source": "Social Media", "target": "Purchase", "value": 120},
+            {"source": "Email", "target": "Sign Up", "value": 150},
+            {"source": "Email", "target": "Purchase", "value": 95},
+            {"source": "Direct", "target": "Purchase", "value": 170},
+            {"source": "Direct", "target": "Upgrade", "value": 60},
+        ]
+        return {"sources": sources, "targets": targets, "links": links}
 
     @staticmethod
-    def _default_data() -> dict[str, Any]:
-        return {
-            "nodes": [
-                {"id": "shots", "label": "Total Shots", "x": 0.08, "y": 0.50},
-                {"id": "2pt", "label": "2-Pointers", "x": 0.36, "y": 0.72},
-                {"id": "3pt", "label": "3-Pointers", "x": 0.36, "y": 0.28},
-                {"id": "made", "label": "Made", "x": 0.64, "y": 0.62},
-                {"id": "missed", "label": "Missed", "x": 0.64, "y": 0.38},
-                {"id": "points", "label": "Points Scored", "x": 0.88, "y": 0.50},
-            ],
-            "flows": [
-                {"source": "shots", "target": "2pt", "value": 650, "color": "#ff0055"},
-                {"source": "shots", "target": "3pt", "value": 350, "color": "#00ccff"},
-                {"source": "2pt", "target": "made", "value": 390, "color": "#00ff99"},
-                {"source": "2pt", "target": "missed", "value": 260, "color": "#ffcc00"},
-                {"source": "3pt", "target": "made", "value": 140, "color": "#ff00ff"},
-                {"source": "3pt", "target": "missed", "value": 210, "color": "#ff6b35"},
-                {"source": "made", "target": "points", "value": 920, "color": "#7b68ee"},
-            ],
+    def _layout_nodes(
+        ax: plt.Axes,
+        sources: list[str],
+        targets: list[str],
+        positions: dict[str, tuple[float, float]],
+    ) -> None:
+        """计算节点布局位置：源节点均匀分布在左侧 X=10%，目标节点在右侧 X=90%。"""
+        n_sources = len(sources)
+        n_targets = len(targets)
+        y_spacing_source = 80 / max(n_sources - 1, 1)                    # 源节点垂直间距
+        y_spacing_target = 80 / max(n_targets - 1, 1)                   # 目标节点垂直间距
+
+        for i, src in enumerate(sources):
+            y_pos = 90 - i * y_spacing_source if n_sources > 1 else 50   # 从上到下排列
+            positions[src] = (10.0, y_pos)
+
+        for i, tgt in enumerate(targets):
+            y_pos = 90 - i * y_spacing_target if n_targets > 1 else 50
+            positions[tgt] = (90.0, y_pos)
+
+    def _draw_links(
+        self,
+        ax: plt.Axes,
+        links: list[dict],
+        sources: list[str],
+        targets: list[str],
+        positions: dict[str, tuple[float, float]],
+        style: str,
+        theme,
+    ) -> None:
+        """绘制所有流带链接：根据样式选择对应的贝塞尔曲线路径渲染方法。"""
+        renderer_map = {
+            "neon_streams": self._draw_neon_link,     # 霓虹流光 → 霓虹发光绘制
+            "energy_flow": self._draw_crystal_link,    # 能量流动 → 晶体流线绘制
+            "crystal_rivers": self._draw_sunset_link,  # 晶体河流 → 日落丝带绘制
+            "golden_paths": self._draw_ocean_link,     # 黄金之路 → 洋流绘制
         }
+        renderer = renderer_map.get(style, self._draw_neon_link)  # 根据样式名选择渲染方法，默认回退到霓虹流光
 
-    def _resolve_data(self, data: dict[str, Any]) -> dict[str, Any]:
-        if data.get("nodes") and data.get("flows"):
-            return data
-        return self._default_data()
+        all_values = [link["value"] for link in links]
+        max_val = max(all_values) if all_values else 1
+
+        for link in links:
+            src_name = link["source"]
+            tgt_name = link["target"]
+            value = link["value"]
+
+            if src_name not in positions or tgt_name not in positions:
+                continue
+
+            x1, y1 = positions[src_name]                                 # 源节点坐标
+            x2, y2 = positions[tgt_name]                                 # 目标节点坐标
+            thickness = max((value / max_val) * 8 + 1.5, 1.5)           # 流量→线宽映射
+
+            color = link.get("color") or theme.palette[
+                (sources.index(src_name) if src_name in sources else targets.index(tgt_name)) % len(theme.palette)
+            ]
+            renderer(ax, x1, y1, x2, y2, thickness, color, value)
 
     @staticmethod
-    def _prepare_layout(data: dict[str, Any]):
-        nodes_raw = data["nodes"]
-        flows_raw = data["flows"]
-        node_map = {n["id"]: n for n in nodes_raw}
-        max_val = max((f["value"] for f in flows_raw), default=1)
-        nodes = []
-        for n in nodes_raw:
-            x = n.get("x")
-            y = n.get("y")
-            if x is None or y is None:
-                x, y = 0.5, 0.5
-            nodes.append({"id": n["id"], "label": n.get("label", n["id"]), "x": float(x), "y": float(y)})
+    def _bezier_path(x1: float, y1: float, x2: float, y2: float, thickness: float) -> Path:
+        """生成 9 点三次贝塞尔曲线路径：用于绘制平滑的流带形状。
 
-        flows = []
-        for f in flows_raw:
-            src = node_map[f["source"]]
-            tgt = node_map[f["target"]]
-            flows.append(
-                {
-                    "source_id": f["source"],
-                    "target_id": f["target"],
-                    "value": f["value"],
-                    "color": f.get("color", "#ffffff"),
-                    "sx": float(src["x"]),
-                    "sy": float(src["y"]),
-                    "tx": float(tgt["x"]),
-                    "ty": float(tgt["y"]),
-                    "norm_value": f["value"] / max_val,
-                }
+        路径结构：
+          P0: 源节点左侧边缘起点（上沿）
+          P1-P3: 左侧贝塞尔控制点（形成 S 形弯曲）
+          P4: 曲线中点
+          P5-P7: 右侧贝塞尔控制点（反向 S 形）
+          P8: 目标节点右侧边缘终点（下沿）
+        """
+        dx = x2 - x1
+        dy = y2 - y1
+        cx1 = x1 + dx * 0.30                                         # 第一段控制点（靠近源端 30% 处）
+        cy1 = y1
+        cx2 = x1 + dx * 0.70                                         # 第二段控制点（靠近目标端 70% 处）
+        cy2 = y2
+        mid_x = (x1 + x2) / 2                                        # 中点 X 坐标
+        mid_y = (y1 + y2) / 2                                        # 中点 Y 坐标
+        half_t = thickness / 2
+
+        verts = [
+            (x1, y1 + half_t),                                       # P0: 起点（上沿）
+            (cx1, cy1 + half_t * 1.3),                                # P1: 上侧控制点1（略微加宽模拟透视）
+            (mid_x, mid_y + half_t * 0.6),                            # P2: 上侧中点（收窄）
+            (cx2, cy2 + half_t),                                      # P3: 上侧控制点2
+            (x2, y2 + half_t),                                        # P4: 右上角转折点
+            (cx2, cy2 - half_t),                                      # P5: 下侧控制点2
+            (mid_x, mid_y - half_t * 0.6),                            # P6: 下侧中点
+            (cx1, cy1 - half_t * 1.3),                                # P7: 下侧控制点1
+            (x1, y1 - half_t),                                        # P8: 回到起点（闭合）
+        ]
+
+        codes = [
+            Path.MOVETO,                                             # 移动到起点
+            Path.CURVE4,                                              # 三次贝塞尔 P0→P1→P2→P3
+            Path.CURVE4,                                              # 三次贝塞尔 P3→P4→P5→P6
+            Path.CURVE4,                                              # 三次贝塞尔 P6→P7→P8→P0
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CLOSEPOLY,                                           # 闭合路径
+        ]
+        return Path(verts, codes)
+
+    @staticmethod
+    def _draw_neon_link(ax: plt.Axes, x1: float, y1: float, x2: float, y2: float, thickness: float, color: str, value: float) -> None:
+        """霓虹流样式链接：多层辉光描边 + 半透明内核填充。"""
+        path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness)
+
+        for lw, alpha in [(thickness * 3.5, 0.04), (thickness * 2.0, 0.10), (thickness * 1.1, 0.25)]:
+            patch = PathPatch(path, facecolor="none", edgecolor=color, linewidth=lw, alpha=alpha, zorder=2, capstyle="round", joinstyle="round")
+            ax.add_patch(patch)
+
+        fill_patch = PathPatch(path, facecolor=color, edgecolor="none", alpha=0.28, zorder=3)
+        ax.add_patch(fill_patch)
+
+        core_path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness * 0.35)
+        core_patch = PathPatch(core_path, facecolor="#ffffff", edgecolor="none", alpha=0.55, zorder=4)
+        ax.add_patch(core_patch)
+
+    @staticmethod
+    def _draw_crystal_link(ax: plt.Axes, x1: float, y1: float, x2: float, y2: float, thickness: float, color: str, value: float) -> None:
+        """水晶流样式链接：透明玻璃质感、高光线条、柔和阴影。"""
+        path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness)
+
+        shadow_offset_x = 1.2                                          # 阴影偏移量
+        shadow_verts = [(v[0] + shadow_offset_x, v[1] - 0.8) for v in path.vertices]
+        shadow_codes = list(path.codes)
+        shadow_path = Path(shadow_verts, shadow_codes)
+        shadow_patch = PathPatch(shadow_path, facecolor="#000000", edgecolor="none", alpha=0.12, zorder=1)
+        ax.add_patch(shadow_patch)
+
+        fill_patch = PathPatch(path, facecolor=color, edgecolor="none", alpha=0.35, zorder=3)
+        ax.add_patch(fill_patch)
+
+        highlight_path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness * 0.18)
+        highlight_patch = PathPatch(highlight_path, facecolor="#ffffff", edgecolor="none", alpha=0.45, zorder=4)
+        ax.add_patch(highlight_patch)
+
+        edge_patch = PathPatch(path, facecolor="none", edgecolor=color, linewidth=1.2, alpha=0.65, zorder=5)
+        ax.add_patch(edge_patch)
+
+    @staticmethod
+    def _draw_sunset_link(ax: plt.Axes, x1: float, y1: float, x2: float, y2: float, thickness: float, color: str, value: float) -> None:
+        """日落丝带样式链接：暖色渐变填充、环境光晕、金色高光中心。"""
+        path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness)
+
+        glow_lw = thickness * 2.5
+        glow_patch = PathPatch(path, facecolor="none", edgecolor="#ffd700", linewidth=glow_lw, alpha=0.08, zorder=1, capstyle="round")
+        ax.add_patch(glow_patch)
+
+        from matplotlib.colors import to_rgb, LinearSegmentedColormap
+        c_rgb = np.array(to_rgb(color))
+        g_rgb = np.array(to_rgb("#ffd700"))
+        blend = c_rgb * 0.70 + g_rgb * 0.30                              # 原色与金色混合
+        hex_blend = f"#{int(blend[0]*255):02x}{int(blend[1]*255):02x}{int(blend[2]*255):02x}"
+
+        fill_patch = PathPatch(path, facecolor=hex_blend, edgecolor="none", alpha=0.42, zorder=3)
+        ax.add_patch(fill_patch)
+
+        core_path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness * 0.28)
+        core_patch = PathPatch(core_path, facecolor="#fffacd", edgecolor="none", alpha=0.60, zorder=4)
+        ax.add_patch(core_patch)
+
+    @staticmethod
+    def _draw_ocean_link(ax: plt.Axes, x1: float, y1: float, x2: float, y2: float, thickness: float, color: str, value: float) -> None:
+        """洋流样式链接：波浪形调制路径、青色辉光、深浅色调变化。"""
+        base_path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness)
+        n_wave = 12                                                    # 波浪分段数
+        wave_amp = thickness * 0.15                                    # 波浪振幅
+        verts = list(base_path.vertices)
+        codes = list(base_path.codes)
+
+        for i in range(3, min(len(verts) - 3, len(verts))):
+            offset = wave_amp * np.sin(i * np.pi / 2.5)                 # 正弦波调制偏移
+            verts[i] = (verts[i][0], verts[i][1] + offset)              # 仅对中间控制点施加波动
+
+        wave_path = Path(verts, codes)
+
+        glow_patch = PathPatch(wave_path, facecolor="none", edgecolor="#00ffff", linewidth=thickness * 2.0, alpha=0.06, zorder=1, capstyle="round")
+        ax.add_patch(glow_patch)
+
+        fill_patch = PathPatch(wave_path, facecolor=color, edgecolor="none", alpha=0.32, zorder=3)
+        ax.add_patch(fill_patch)
+
+        core_path = SankeyChartSkill._bezier_path(x1, y1, x2, y2, thickness * 0.22)
+        core_patch = PathPatch(core_path, facecolor="#e0ffff", edgecolor="none", alpha=0.50, zorder=4)
+        ax.add_patch(core_patch)
+
+    @staticmethod
+    def _draw_nodes(
+        ax: plt.Axes,
+        sources: list[str],
+        targets: list[str],
+        positions: dict[str, tuple[float, float]],
+        style: str,
+        theme,
+    ) -> None:
+        """绘制所有节点：圆角矩形 + 渐变填充 + 标签文字。"""
+        color_map = {
+            "neon_flow": ("#1a1a2e", "#ff00ff"),
+            "crystal_stream": ("#f0f0ff", "#4a90d9"),
+            "sunset_ribbon": ("#2d1810", "#ffa500"),
+            "ocean_current": ("#001a33", "#00ced1"),
+        }
+        bg_color, accent_color = color_map.get(style, ("#1a1a2e", "#ff00ff"))
+
+        for name, (x, y) in positions.items():
+            is_target = name in targets
+            width = 14 if is_target else 16                             # 目标节点略窄
+            height = 7.0
+
+            shadow = FancyBboxPatch(                                    # 节点阴影层
+                (x - width / 2 + 0.35, y - height / 2 - 0.25),
+                width, height,
+                boxstyle="round,pad=0.02,rounding_size=0.8",
+                facecolor="#000000",
+                edgecolor="none",
+                alpha=0.20,
+                zorder=5,
             )
-        return nodes, flows
+            ax.add_patch(shadow)
 
-    # ── background / title helpers ────────────────────────────────
+            node = FancyBboxPatch(                                       # 节点主体
+                (x - width / 2, y - height / 2),
+                width, height,
+                boxstyle="round,pad=0.02,rounding_size=0.8",
+                facecolor=bg_color,
+                edgecolor=accent_color,
+                linewidth=1.8,
+                alpha=0.92,
+                zorder=6,
+            )
+            ax.add_patch(node)
 
-    @staticmethod
-    def _bg_color(style: str) -> str:
-        return {
-            "neon_streams": "#0a0a1a",
-            "energy_flow": "#1a1a2e",
-            "crystal_rivers": "#0d1b2a",
-            "golden_paths": "#1a1410",
-        }[style]
-
-    def _draw_title(self, canvas: plt.Axes, title: str | None, subtitle: str | None, style: str) -> None:
-        title_colors = {
-            "neon_streams": "#e0e0ff",
-            "energy_flow": "#ffd166",
-            "crystal_rivers": "#caf0f8",
-            "golden_paths": "#FFD700",
-        }
-        sub_colors = {
-            "neon_streams": "#6a6a9a",
-            "energy_flow": "#8d99ae",
-            "crystal_rivers": "#48cae4",
-            "golden_paths": "#c9a227",
-        }
-        canvas.text(
-            0.5,
-            0.94,
-            (title or "Flow Analysis").upper(),
-            color=title_colors.get(style, "#ffffff"),
-            fontsize=48,
-            fontweight="black",
-            ha="center",
-            va="center",
-            family="sans-serif",
-        )
-        canvas.text(
-            0.5,
-            0.89,
-            subtitle or "Data Flow Visualization | Neo Legend Engine",
-            color=sub_colors.get(style, "#aaaaaa"),
-            fontsize=16,
-            ha="center",
-            va="center",
-            alpha=0.8,
-        )
-
-    def _draw_decorations(self, canvas: plt.Axes, style: str) -> None:
-        if style == "neon_streams":
-            for i in range(21):
-                canvas.axhline(i / 20, color="#ffffff", alpha=0.03, linewidth=0.4)
-            for i in range(31):
-                canvas.axvline(i / 30, color="#ffffff", alpha=0.025, linewidth=0.4)
-        elif style == "golden_paths":
-            corners = [(0.02, 0.96), (0.98, 0.96), (0.02, 0.04), (0.98, 0.04)]
-            for cx, cy in corners:
-                for angle in np.linspace(0, 2 * np.pi, 6, endpoint=False):
-                    ex = cx + 0.025 * np.cos(angle)
-                    ey = cy + 0.025 * np.sin(angle)
-                    canvas.plot([cx, ex], [cy, ey], color="#FFD700", linewidth=0.5, alpha=0.18)
-
-    # ══════════════════════════════════════════════════════════════
-    #  STYLE 1 – NEON STREAMS
-    # ══════════════════════════════════════════════════════════════
-
-    def _render_neon(self, canvas: plt.Axes, nodes: list, flows: list) -> None:
-        for idx, flow in enumerate(flows):
-            color = flow["color"] or self._NEON_COLORS[idx % len(self._NEON_COLORS)]
-            nv = flow["norm_value"]
-            w_base = 0.008 + nv * 0.035
-            self._draw_glow_band(canvas, flow["sx"], flow["sy"], flow["tx"], flow["ty"],
-                                 w_base, color)
-            mx = (flow["sx"] + flow["tx"]) / 2
-            my = (flow["sy"] + flow["ty"]) / 2
-            canvas.text(mx, my + 0.015, f"{int(flow['value'])}",
-                        color="#ffffff", fontsize=8, ha="center", va="center", alpha=0.85,
-                        family="monospace")
-
-        for idx, node in enumerate(nodes):
-            color = self._NEON_COLORS[idx % len(self._NEON_COLORS)]
-            self._draw_neon_node(canvas, node["x"], node["y"], node["label"], color)
+            label_color = "#ffffff"
+            fontsize = 9 if is_target else 10
+            ax.text(x, y, name.upper(), color=label_color, fontsize=fontsize,
+                    fontweight="bold", ha="center", va="center", zorder=7)
 
     @staticmethod
-    def _draw_glow_band(canvas: plt.Axes, sx: float, sy: float, tx: float, ty: float,
-                        width: float, color: str) -> None:
-        layers = [
-            (width * 3.2, 0.06, 0),
-            (width * 2.2, 0.13, 0),
-            (width * 1.5, 0.30, 0),
-            (width * 1.0, 0.78, 0.5),
-        ]
-        for w, a, lw in layers:
-            verts = _band_vertices(sx, sy, tx, ty, w)
-            codes = [Path.MOVETO] + [Path.CURVE4] * 7 + [Path.CLOSEPOLY]
-            patch = PathPatch(Path(verts, codes), facecolor=color, edgecolor=color,
-                              alpha=a, linewidth=lw, capstyle="round", joinstyle="round")
-            canvas.add_patch(patch)
+    def _draw_link_labels(
+        ax: plt.Axes,
+        links: list[dict],
+        sources: list[str],
+        targets: list[str],
+        positions: dict[str, tuple[float, float]],
+        theme,
+    ) -> None:
+        """在每条流带的中点位置绘制流量数值标签。"""
+        for link in links:
+            src_name = link["source"]
+            tgt_name = link["target"]
+            value = link["value"]
 
-    @staticmethod
-    def _draw_neon_node(canvas: plt.Axes, x: float, y: float, label: str, color: str) -> None:
-        for r, a, lw in [(0.055, 0.06, 0), (0.045, 0.12, 0), (0.036, 0.28, 0), (0.028, 0.75, 1.0)]:
-            circle = plt.Circle((x, y), r, facecolor=color if a > 0.5 else "none",
-                                edgecolor=color, alpha=a, linewidth=lw)
-            canvas.add_patch(circle)
-        inner = plt.Circle((x, y), 0.020, facecolor=_lighten(color, 0.3),
-                           edgecolor="none", alpha=0.55)
-        canvas.add_patch(inner)
-        canvas.text(x, y - 0.072, label, color="#dddddd", fontsize=10, ha="center",
-                    va="top", family="monospace", fontweight="bold")
+            if src_name not in positions or tgt_name not in positions:
+                continue
 
-    # ══════════════════════════════════════════════════════════════
-    #  STYLE 2 – ENERGY FLOW
-    # ══════════════════════════════════════════════════════════════
+            x1, y1 = positions[src_name]
+            x2, y2 = positions[tgt_name]
+            mx = (x1 + x2) / 2                                            # 中点 X
+            my = (y1 + y2) / 2                                            # 中点 Y
 
-    def _render_energy(self, canvas: plt.Axes, nodes: list, flows: list) -> None:
-        all_values = [f["value"] for f in flows]
-        vmin, vmax = min(all_values), max(all_values)
-        for flow in flows:
-            t = (flow["value"] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
-            if t < 0.5:
-                color = cmap_color(self._ENERGY_COLORS_COLD, t * 2)
-            else:
-                color = cmap_color(self._ENERGY_COLORS_HOT, (t - 0.5) * 2)
-            w = 0.006 + flow["norm_value"] * 0.038
-            self._draw_solid_band(canvas, flow["sx"], flow["sy"], flow["tx"], flow["ty"], w, color, 0.65)
-            pct = flow["value"] / sum(all_values) * 100
-            mx = (flow["sx"] + flow["tx"]) / 2
-            my = (flow["sy"] + flow["ty"]) / 2
-            canvas.text(mx, my + 0.014, f"{pct:.0f}%", color="#ffffff", fontsize=9,
-                        ha="center", va="center", fontweight="bold", alpha=0.92)
-            self._scatter_particles(canvas, flow["sx"], flow["sy"], flow["tx"], flow["ty"], color, int(flow["value"] / 80))
-
-        node_totals = {n["id"]: 0 for n in nodes}
-        for f in flows:
-            node_totals[f["source_id"]] += f["value"]
-            node_totals[f["target_id"]] += f["value"]
-        nt_max = max(node_totals.values()) if node_totals else 1
-        for node in nodes:
-            total = node_totals[node["id"]]
-            intensity = total / nt_max if nt_max else 0.5
-            heat_color = cmap_color(self._ENERGY_COLORS_COLD + self._ENERGY_COLORS_HOT, intensity)
-            self._draw_heat_node(canvas, node["x"], node["y"], node["label"], heat_color, intensity)
-
-    @staticmethod
-    def _draw_solid_band(canvas: plt.Axes, sx: float, sy: float, tx: float, ty: float,
-                         width: float, color: str, alpha: float) -> None:
-        verts = _band_vertices(sx, sy, tx, ty, width)
-        codes = [Path.MOVETO] + [Path.CURVE4] * 7 + [Path.CLOSEPOLY]
-        canvas.add_patch(PathPatch(Path(verts, codes), facecolor=color, edgecolor="none",
-                                   alpha=alpha, capstyle="round", joinstyle="round"))
-
-    @staticmethod
-    def _scatter_particles(canvas: plt.Axes, sx: float, sy: float, tx: float, ty: float,
-                           color: str, count: int) -> None:
-        rng = np.random.default_rng(hash((sx, sy, tx, ty)) % (2**32))
-        for _ in range(min(count, 18)):
-            t = rng.uniform(0.15, 0.85)
-            px = sx + (tx - sx) * t + rng.normal(0, 0.008)
-            py = sy + (ty - sy) * t + rng.normal(0, 0.012)
-            sz = rng.uniform(0.003, 0.010)
-            canvas.add_patch(plt.Circle((px, py), sz, facecolor=color, alpha=0.55, edgecolor="none"))
-
-    @staticmethod
-    def _draw_heat_node(canvas: plt.Axes, x: float, y: float, label: str,
-                        color: str, intensity: float) -> None:
-        for r_mult, a in [(2.0, 0.06), (1.55, 0.12), (1.2, 0.22)]:
-            canvas.add_patch(plt.Circle((x, y), 0.032 * r_mult, facecolor="none",
-                                        edgecolor=color, linewidth=1.2, alpha=a))
-        canvas.add_patch(plt.Circle((x, y), 0.030, facecolor=color, edgecolor="white",
-                                    alpha=0.82, linewidth=1.0))
-        canvas.text(x, y - 0.055, label, color="#eeeeee", fontsize=10, ha="center",
-                    va="top", fontweight="bold")
-
-    # ══════════════════════════════════════════════════════════════
-    #  STYLE 3 – CRYSTAL RIVERS
-    # ══════════════════════════════════════════════════════════════
-
-    def _render_crystal(self, canvas: plt.Axes, nodes: list, flows: list) -> None:
-        target_flows: dict[str, list] = {}
-        for f in flows:
-            target_flows.setdefault(f["target_id"], []).append(f)
-
-        for idx, flow in enumerate(flows):
-            color = flow["color"] or self._CRYSTAL_COLORS[idx % len(self._CRYSTAL_COLORS)]
-            w = 0.006 + flow["norm_value"] * 0.034
-            self._draw_gradient_band(canvas, flow["sx"], flow["sy"], flow["tx"], flow["ty"],
-                                     w, color, 0.70, 0.10)
-            self._draw_refraction_lines(canvas, flow["sx"], flow["sy"], flow["tx"], flow["ty"],
-                                        w, color)
-
-        for idx, node in enumerate(nodes):
-            color = self._CRYSTAL_COLORS[idx % len(self._CRYSTAL_COLORS)]
-            self._draw_crystal_node(canvas, node["x"], node["y"], node["label"], color)
-
-    @staticmethod
-    def _draw_gradient_band(canvas: plt.Axes, sx: float, sy: float, tx: float, ty: float,
-                            width: float, color: str, alpha_start: float, alpha_end: float) -> None:
-        segments = 14
-        for i in range(segments):
-            t0 = i / segments
-            t1 = (i + 1) / segments
-            frac = (t0 + t1) / 2
-            ax_ = sx + (tx - sx) * t0
-            ay_ = sy + (ty - sy) * t0
-            bx_ = sx + (tx - sx) * t1
-            by_ = sy + (ty - sy) * t1
-            alpha = alpha_start + (alpha_end - alpha_start) * frac
-            w_seg = width * (1.0 - frac * 0.25)
-            verts = _band_vertices(ax_, ay_, bx_, by_, w_seg)
-            codes = [Path.MOVETO] + [Path.CURVE4] * 7 + [Path.CLOSEPOLY]
-            canvas.add_patch(PathPatch(Path(verts, codes), facecolor=color, edgecolor="none",
-                                       alpha=max(alpha, 0.04), capstyle="butt", joinstyle="round"))
-
-    @staticmethod
-    def _draw_refraction_lines(canvas: plt.Axes, sx: float, sy: float, tx: float, ty: float,
-                               width: float, base_color: str) -> None:
-        steps = 20
-        for i in range(steps):
-            t = i / steps
-            cx = sx + (tx - sx) * t
-            cy = sy + (ty - sy) * t
-            hw = width * 0.45 * (1.0 - t * 0.2)
-            dx = (ty - sy)
-            dy = -(tx - sx)
-            dlen = np.hypot(dx, dy) or 1.0
-            dx /= dlen
-            dy /= dlen
-            canvas.plot([cx - dx * hw, cx + dx * hw], [cy - dy * hw, cy + dy * hw],
-                        color="#ffffff", alpha=0.06, linewidth=0.35)
-
-    @staticmethod
-    def _draw_crystal_node(canvas: plt.Axes, x: float, y: float, label: str, color: str) -> None:
-        ellipse = MplEllipse((x, y), 0.070, 0.044, angle=0,
-                              facecolor=_lighten(color, 0.25), edgecolor="#ffffff",
-                              alpha=0.85, linewidth=1.4)
-        canvas.add_patch(ellipse)
-        inner = MplEllipse((x, y), 0.042, 0.026, angle=0,
-                            facecolor=_lighten(color, 0.55), edgecolor="none", alpha=0.40)
-        canvas.add_patch(inner)
-        canvas.text(x, y - 0.04, label, color="#d0e8ef", fontsize=10, ha="center",
-                    va="top", fontweight="bold", alpha=0.92)
-
-    # ══════════════════════════════════════════════════════════════
-    #  STYLE 4 – GOLDEN PATHS
-    # ══════════════════════════════════════════════════════════════
-
-    def _render_golden(self, canvas: plt.Axes, nodes: list, flows: list) -> None:
-        source_ids = {f["source_id"] for f in flows}
-        sink_ids = {f["target_id"] for f in flows}
-        for idx, flow in enumerate(flows):
-            color = flow["color"] or self._GOLDEN_COLORS[idx % len(self._GOLDEN_COLORS)]
-            w = 0.007 + flow["norm_value"] * 0.036
-            self._draw_gold_band(canvas, flow["sx"], flow["sy"], flow["tx"], flow["ty"], w, color)
-            mx = (flow["sx"] + flow["tx"]) / 2
-            my = (flow["sy"] + flow["ty"]) / 2
-            is_important = flow["norm_value"] > 0.65
-            txt = f"{'* ' if is_important else ''}{int(flow['value'])}"
-            canvas.text(mx, my + 0.016, txt, color="#fff8e0", fontsize=9 if is_important else 8,
-                        ha="center", va="center", family="serif", alpha=0.92)
-
-        for idx, node in enumerate(nodes):
-            color = self._GOLDEN_COLORS[idx % len(self._GOLDEN_COLORS)]
-            is_source_or_sink = node["id"] in source_ids or node["id"] in sink_ids
-            self._draw_golden_node(canvas, node["x"], node["y"], node["label"], color,
-                                   is_source_or_sink, node["id"])
-
-    @staticmethod
-    def _draw_gold_band(canvas: plt.Axes, sx: float, sy: float, tx: float, ty: float,
-                        width: float, color: str) -> None:
-        glow_layers = [
-            (width * 2.6, 0.07, 0),
-            (width * 1.8, 0.15, 0),
-            (width * 1.25, 0.38, 0),
-            (width * 1.0, 0.80, 0.6),
-        ]
-        for w, a, lw in glow_layers:
-            verts = _band_vertices(sx, sy, tx, ty, w)
-            codes = [Path.MOVETO] + [Path.CURVE4] * 7 + [Path.CLOSEPOLY]
-            canvas.add_patch(PathPatch(Path(verts, codes), facecolor=color, edgecolor=color,
-                                       alpha=a, linewidth=lw, capstyle="round", joinstyle="round"))
-
-    @staticmethod
-    def _draw_golden_node(canvas: plt.Axes, x: float, y: float, label: str, color: str,
-                          radiant: bool, node_id: str) -> None:
-        shadow = FancyBboxPatch((x - 0.032 + 0.005, y - 0.020 + 0.005), 0.064, 0.040,
-                                boxstyle="round,pad=0.008,rounding_size=0.01",
-                                facecolor="#000000", edgecolor="none", alpha=0.30)
-        canvas.add_patch(shadow)
-        box = FancyBboxPatch((x - 0.032, y - 0.020), 0.064, 0.040,
-                             boxstyle="round,pad=0.008,rounding_size=0.01",
-                             facecolor=_darken(color, 0.35), edgecolor=color,
-                             linewidth=2.6, alpha=0.92)
-        canvas.add_patch(box)
-        inner_box = FancyBboxPatch((x - 0.022, y - 0.013), 0.044, 0.026,
-                                   boxstyle="round,pad=0.004,rounding_size=0.006",
-                                   facecolor=_lighten(color, 0.2), edgecolor="none",
-                                   alpha=0.30)
-        canvas.add_patch(inner_box)
-        canvas.text(x, y, label, color="#fff8e0", fontsize=9, ha="center", va="center",
-                    family="serif", fontweight="bold", alpha=0.95)
-        if radiant:
-            num_rays = 12
-            for i in range(num_rays):
-                angle = 2 * np.pi * i / num_rays + np.pi / num_rays
-                ray_len = 0.035 + 0.018 * ((i % 3) / 2)
-                rx = x + ray_len * np.cos(angle)
-                ry = y + ray_len * np.sin(angle)
-                canvas.plot([x, rx], [y, ry], color="#FFD700", linewidth=0.6,
-                            alpha=0.12 + 0.08 * (1 - abs(np.sin(angle))), solid_capstyle="round")
-
-
-def _band_vertices(sx: float, sy: float, tx: float, ty: float, half_w: float) -> list:
-    dx = tx - sx
-    dy = ty - sy
-    dist = np.hypot(dx, dy)
-    if dist < 1e-8:
-        nx, ny = 1.0, 0.0
-    else:
-        nx, ny = -dy / dist, dx / dist
-    perp_x = nx * half_w
-    perp_y = ny * half_w
-    cx = sx + dx * 0.5
-    cy = sy + dy * 0.5
-    offset = dist * 0.12
-    ctrl_x = cx - ny * offset
-    ctrl_y = cy + nx * offset
-    return [
-        (sx - perp_x, sy - perp_y),
-        (ctrl_x - perp_x * 0.6, ctrl_y - perp_y * 0.6),
-        (tx - perp_x * 0.85, ty - perp_y * 0.85),
-        (tx - perp_x * 0.3, ty - perp_y * 0.3),
-        (tx + perp_x * 0.3, ty + perp_y * 0.3),
-        (tx + perp_x * 0.85, ty + perp_y * 0.85),
-        (ctrl_x + perp_x * 0.6, ctrl_y + perp_y * 0.6),
-        (sx + perp_x, sy + perp_y),
-        (sx - perp_x, sy - perp_y),
-    ]
-
-
-def _lighten(hex_color: str, amount: float) -> str:
-    hex_color = hex_color.lstrip("#")
-    r = min(255, int(hex_color[0:2], 16) + int(amount * 255))
-    g = min(255, int(hex_color[2:4], 16) + int(amount * 255))
-    b = min(255, int(hex_color[4:6], 16) + int(amount * 255))
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _darken(hex_color: str, amount: float) -> str:
-    hex_color = hex_color.lstrip("#")
-    r = max(0, int(hex_color[0:2], 16) - int(amount * 255))
-    g = max(0, int(hex_color[2:4], 16) - int(amount * 255))
-    b = max(0, int(hex_color[4:6], 16) - int(amount * 255))
-    return f"#{r:02x}{g:02x}{b:02x}"
+            bbox_props = dict(boxstyle="round,pad=0.18", facecolor=theme.panel_alt,
+                              edgecolor=theme.border, alpha=0.85, linewidth=0.6)
+            ax.text(mx, my, format_metric(value), color=theme.text, fontsize=8,
+                    fontweight="bold", ha="center", va="center", zorder=8, bbox=bbox_props)

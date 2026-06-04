@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Executive Calendar Chart (Neo Legend 日历图)"
+  short_description: "Tune `calendar_chart` chart styling and data rules. (调优 `calendar_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-calendar-chart to tune the Neo Legend `calendar_chart` renderer. (使用 $neo-legend-calendar-chart 来调优 Neo Legend `calendar_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

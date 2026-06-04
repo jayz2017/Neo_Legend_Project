@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>真实 NBA 球员投篮数据验证</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0d1117; color: #c9d1d9; font-family: 'Microsoft YaHei', sans-serif; padding: 20px; }
+        h1 { text-align: center; color: #58a6ff; font-size: 26px; margin-bottom: 6px; }
+        .subtitle { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 30px; }
+        .player-section { margin-bottom: 40px; }
+        .player-title { color: #f0883e; font-size: 20px; border-bottom: 1px solid #30363d; padding-bottom: 8px; margin-bottom: 16px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 16px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+        .card-header { padding: 8px 12px; background: #21262d; display: flex; justify-content: space-between; align-items: center; }
+        .card-title { color: #c9d1d9; font-size: 13px; font-weight: 600; }
+        .card-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #1f6feb33; color: #58a6ff; }
+        .card-img { width: 100%; aspect-ratio: 1179/1454; object-fit: contain; background: #0d1117; cursor: pointer; transition: transform 0.2s; }
+        .card-img:hover { transform: scale(1.02); }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 1000; cursor: pointer; }
+        .modal img { max-width: 95%; max-height: 95%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .modal.active { display: block; }
+        .info-bar { text-align: center; margin: 24px 0; padding: 12px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; }
+        .info-bar code { color: #7ee787; background: #0d1117; padding: 2px 8px; border-radius: 4px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <h1>NBA 真实球员投篮数据 - 坐标系验证</h1>
+    <p class="subtitle">使用 Stephen Curry & LeBron James 的真实投篮分布数据 | 点击图片可放大查看</p>
+
+    <div class="info-bar">
+        坐标转换: <code>code_x = nba_x_ft × 10</code> | 
+        <code>code_y = (nba_y_ft + 4) × 10</code> | 
+        篮筐 y=40 | 三分弧 y=277.5 | 底角 x=±220
+    </div>
+
+    <!-- Stephen Curry -->
+    <div class="player-section">
+        <div class="player-title">🏀 Stephen Curry — 投篮热力图 & 区域散点图</div>
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Terrain 热力图样式</span>
+                    <span class="card-badge">369 次投篮</span>
+                </div>
+                <img class="card-img" src="real_stephen_curry_shotchart.png" alt="Curry Terrain"
+                     onclick="document.getElementById('modal-img').src=this.src; document.getElementById('modal').classList.add('active');">
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Zone 区域散点图样式</span>
+                    <span class="card-badge">命中率 41.2%</span>
+                </div>
+                <img class="card-img" src="real_stephen_curry_zone.png" alt="Curry Zone"
+                     onclick="document.getElementById('modal-img').src=this.src; document.getElementById('modal').classList.add('active');">
+            </div>
+        </div>
+    </div>
+
+    <!-- LeBron James -->
+    <div class="player-section">
+        <div class="player-title">🏀 LeBron James — 投篮热力图 & 区域散点图</div>
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Terrain 热力图样式</span>
+                    <span class="card-badge">275 次投篮</span>
+                </div>
+                <img class="card-img" src="real_lebron_james_shotchart.png" alt="LeBron Terrain"
+                     onclick="document.getElementById('modal-img').src=this.src; document.getElementById('modal').classList.add('active');">
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Zone 区域散点图样式</span>
+                    <span class="card-badge">命中率 45.5%</span>
+                </div>
+                <img class="card-img" src="real_lebron_james_zone.png" alt="LeBron Zone"
+                     onclick="document.getElementById('modal-img').src=this.src; document.getElementById('modal').classList.add('active');">
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal" onclick="this.classList.remove('active')">
+        <img id="modal-img" src="">
+    </div>
+</body>
+</html>

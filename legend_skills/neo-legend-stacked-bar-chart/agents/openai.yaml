@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Rounded Stacked Bar Chart (Neo Legend 堆叠柱状图)"
+  short_description: "Tune `stacked_bar_chart` chart styling and data rules. (调优 `stacked_bar_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-stacked-bar-chart to tune the Neo Legend `stacked_bar_chart` renderer. (使用 $neo-legend-stacked-bar-chart 来调优 Neo Legend `stacked_bar_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

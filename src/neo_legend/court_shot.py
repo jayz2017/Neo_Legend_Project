@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+"""
+球场投射图渲染器 (Court Shot Renderer)
+========================================
+功能：生成 NBA 风格的球员投篮热力分布图，支持 terrain/hex/kobe_shots/points_location 等样式。
+依赖：matplotlib, numpy, scipy (部分)
+"""
+
 """Court shooting terrain renderer skill."""
 
-from __future__ import annotations
 
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
@@ -10,7 +18,7 @@ from matplotlib.tri import Triangulation
 import numpy as np
 
 from neo_legend.models import RenderRequest, RenderResult
-from neo_legend._court import draw_half_court, sample_shots
+from neo_legend._court import draw_half_court, sample_shots, BASKET_Y, THREE_PT_ARC_RADIUS, CORNER_3_X, FT_LINE_Y, PAINT_HALF_WIDTH
 from neo_legend._plotting import (
     add_canvas,
     add_reference_footer,
@@ -23,11 +31,13 @@ from neo_legend.base import BaseLegendSkill, StyleDefinition
 
 
 class CourtShotSkill(BaseLegendSkill):
-    legend_type = "court_shot"
-    display_name = "Court Shooting Terrain"
-    default_style = "terrain"
-    default_size = (1179, 1454)
-    style_definitions = (
+    """球场投射图渲染器 — 支持 terrain(地形)、hex(六边形)、kobe_shots(科比投篮)、points_location(位置得分) 四种样式。"""
+
+    legend_type = "court_shot"          # 图例类型标识符
+    display_name = "Court Shooting Terrain"  # 显示名称
+    default_style = "terrain"           # 默认样式：深色半场投篮地形
+    default_size = (1179, 1454)         # 默认输出尺寸（宽，高）
+    style_definitions = (               # 样式定义元组
         StyleDefinition(
             "terrain",
             "Dark half-court shooting terrain with glowing efficiency zones.",
@@ -51,12 +61,14 @@ class CourtShotSkill(BaseLegendSkill):
     )
 
     def render(self, request: RenderRequest) -> RenderResult:
+        """主渲染入口：根据请求参数选择对应样式并渲染图片。"""
         style = self.resolve_style(request.style)
         width, height = self.output_size(request)
         content = self._render_png(request, style, width, height)
         return self.result(content, style)
 
     def _render_png(self, request: RenderRequest, style: str, width: int, height: int) -> bytes:
+        """PNG 渲染分发器：根据样式类型路由到对应的渲染方法。"""
         if style == "points_location":
             return self._render_points_location(request, width, height)
         if style == "kobe_shots":
@@ -90,27 +102,27 @@ class CourtShotSkill(BaseLegendSkill):
 
         court_ax = fig.add_axes([0.06, 0.06, 0.88, 0.58], facecolor="#020303")
         draw_half_court(court_ax, line_color="#dedbd0", line_width=1.05, alpha=0.62)
-        shot_count = int(request.data.get("shot_count", 620))
-        seed = int(request.data.get("seed", 11))
+        shot_count = int(request.data.get("shot_count", 620))  # 投篮点数量
+        seed = int(request.data.get("seed", 11))              # 随机种子，用于可复现的投篮采样
         x, y, value = sample_shots(seed=seed, count=shot_count)
 
         if style == "terrain":
-            self._draw_terrain_mesh(court_ax, x, y, value)
+            self._draw_terrain_mesh(court_ax, x, y, value)     # 地形网格样式
         elif style == "hex":
             cmap = make_gradient(["#4b7cbf", "#f1edd1", "#d51e38"], "shot_hex")
-            sizes = np.interp(value, (value.min(), value.max()), (18, 96))
+            sizes = np.interp(value, (value.min(), value.max()), (18, 96))  # 将值映射到标记尺寸范围
             court_ax.scatter(x, y, c=value, s=sizes, cmap=cmap, marker="h", alpha=0.82, lw=0)
-            court_ax.scatter(x[::9], y[::9], s=9, color="#fff4c7", alpha=0.65)
+            court_ax.scatter(x[::9], y[::9], s=9, color="#fff4c7", alpha=0.65)  # 每9个点取一个高亮点
         else:
-            self._draw_zones(court_ax, x, y, value)
+            self._draw_zones(court_ax, x, y, value)           # 区域标注样式
 
         if style != "zone":
             for label, px, py in [
-                ("51%", -165, 98),
-                ("60%", 38, 75),
-                ("42%", 178, 260),
-                ("31%", -205, 315),
-                ("40%", 112, 212),
+                ("51%", -160, 95),       # 左翼中距离 (左侧肘区)
+                ("60%", 0, 72),          # 篮下 (篮筐上方)
+                ("42%", 160, 255),       # 右侧弧顶外 (三分线右侧)
+                ("31%", -210, 55),       # 左底角三分 (底角区域)
+                ("40%", 0, 230),         # 罚球线中距离 (罚球线附近)
             ]:
                 court_ax.text(px, py, label, color="#f5f4ec", fontsize=14, fontweight="bold")
 
@@ -119,27 +131,34 @@ class CourtShotSkill(BaseLegendSkill):
 
     @staticmethod
     def _draw_terrain_mesh(ax: plt.Axes, x: np.ndarray, y: np.ndarray, value: np.ndarray) -> None:
+        """绘制地形网格效果：通过三角剖分和多重高斯核叠加生成发光的热力地形。"""
         rng = seeded_rng(412)
+        # 复制一半数据并添加噪声以增加密度和平滑度
         terrain_x = np.concatenate([x, x[: len(x) // 2] + rng.normal(0, 16, len(x) // 2)])
-        terrain_y = np.concatenate([y, y[: len(x) // 2] + rng.normal(0, 14, len(x) // 2)])
+        terrain_y = np.concatenate([y, y[: len(y) // 2] + rng.normal(0, 14, len(y) // 2)])
         terrain_value = np.concatenate([value, value[: len(x) // 2] + rng.normal(0, 0.18, len(x) // 2)])
+
+        # 筛选在球场有效区域内的点（篮筐附近、底角、弧顶）
         active = (
-            (np.hypot(terrain_x, terrain_y - 52.5) < 150)
+            (np.hypot(terrain_x, terrain_y - BASKET_Y) < 150)
             | ((np.abs(terrain_x) > 115) & (terrain_y < 345))
             | ((terrain_y > 165) & (terrain_y < 385) & (np.abs(terrain_x) < 220))
         )
         terrain_x = terrain_x[active]
         terrain_y = terrain_y[active]
         terrain_value = terrain_value[active]
-        tri = Triangulation(terrain_x, terrain_y)
+
+        tri = Triangulation(terrain_x, terrain_y)             # Delaunay 三角剖分
         triangles = tri.triangles
-        centers_x = terrain_x[triangles].mean(axis=1)
-        centers_y = terrain_y[triangles].mean(axis=1)
-        edge_lengths = np.ptp(terrain_x[triangles], axis=1) + np.ptp(terrain_y[triangles], axis=1)
+        centers_x = terrain_x[triangles].mean(axis=1)         # 三角形质心 X 坐标
+        centers_y = terrain_y[triangles].mean(axis=1)         # 三角形质心 Y 坐标
+        edge_lengths = np.ptp(terrain_x[triangles], axis=1) + np.ptp(terrain_y[triangles], axis=1)  # 三角形边长总和
+
+        # 过滤掉过大或超出球场的三角形
         keep = (
             (edge_lengths < 58)
             & (
-                (np.hypot(centers_x, centers_y - 52.5) < 165)
+                (np.hypot(centers_x, centers_y - BASKET_Y) < 165)
                 | ((np.abs(centers_x) > 105) & (centers_y < 355))
                 | ((centers_y > 155) & (centers_y < 395) & (np.abs(centers_x) < 225))
             )
@@ -147,13 +166,16 @@ class CourtShotSkill(BaseLegendSkill):
         polygons = [np.column_stack([terrain_x[indexes], terrain_y[indexes]]) for indexes in triangles[keep]]
         kept_x = centers_x[keep]
         kept_y = centers_y[keep]
+
+        # 使用四个高斯核模拟不同区域的"热度"（左翼、罚球线、右翼、随机噪声）
         heat = (
-            0.95 * np.exp(-(((kept_x + 165) / 82) ** 2 + ((kept_y - 235) / 95) ** 2))
-            + 1.15 * np.exp(-(((kept_x - 10) / 82) ** 2 + ((kept_y - 65) / 72) ** 2))
+            0.95 * np.exp(-(((kept_x + 160) / 82) ** 2 + ((kept_y - 230) / 95) ** 2))
+            + 1.15 * np.exp(-(((kept_x - 8) / 82) ** 2 + ((kept_y - BASKET_Y + 28) / 72) ** 2))
             + 0.65 * np.exp(-(((kept_x - 150) / 72) ** 2 + ((kept_y - 225) / 92) ** 2))
             + 0.12 * rng.random(len(kept_x))
         )
-        normalized = np.clip(heat / max(heat.max(), 1e-6), 0, 1)
+        normalized = np.clip(heat / max(heat.max(), 1e-6), 0, 1)  # 归一化到 [0, 1]
+
         cmap = make_gradient(["#202123", "#2a292b", "#443037", "#913043", "#ef8e91"], "terrain_mesh")
         colors = [cmap(float(item)) for item in normalized]
         collection = PolyCollection(
@@ -165,11 +187,11 @@ class CourtShotSkill(BaseLegendSkill):
         )
         ax.add_collection(collection)
 
-        glow = np.clip(normalized - 0.28, 0, 1)
+        glow = np.clip(normalized - 0.28, 0, 1)               # 仅对高亮区域添加辉光
         ax.scatter(
             kept_x,
             kept_y,
-            s=16 + glow * 96,
+            s=16 + glow * 96,                                  # 辉光点大小随热度增加
             c=glow,
             cmap=make_gradient(["#32252a", "#c23147", "#ffd0ca"], "terrain_glow"),
             alpha=0.20,
@@ -178,16 +200,17 @@ class CourtShotSkill(BaseLegendSkill):
 
     @staticmethod
     def _draw_zones(ax: plt.Axes, x: np.ndarray, y: np.ndarray, value: np.ndarray) -> None:
-        rim = np.hypot(x, y - 52.5) < 95
-        left = (x < -115) & (y < 315)
-        right = (x > 115) & (y < 315)
-        arc = (y >= 165) & (np.abs(x) <= 210)
+        """绘制分区标注样式：将球场划分为篮下、左侧、右侧、弧顶等区域并用不同颜色标识。"""
+        rim = np.hypot(x, y - BASKET_Y) < 95                      # 篮下区域判定
+        left = (x < -115) & (y < 315)                         # 左侧区域判定
+        right = (x > 115) & (y < 315)                         # 右侧区域判定
+        arc = (y >= 165) & (np.abs(x) <= 210)                 # 弧顶区域判定
 
-        colors = np.full(len(x), "#3a3d42", dtype=object)
-        colors[arc] = "#5b303a"
-        colors[left] = "#bd2441"
-        colors[right] = "#66a9d1"
-        colors[rim] = "#f0b1aa"
+        colors = np.full(len(x), "#3a3d42", dtype=object)     # 默认颜色
+        colors[arc] = "#5b303a"                                # 弧顶：深红紫
+        colors[left] = "#bd2441"                               # 左侧：红色
+        colors[right] = "#66a9d1"                              # 右侧：蓝色
+        colors[rim] = "#f0b1aa"                                # 篛下：浅粉红
         sizes = np.interp(value, (value.min(), value.max()), (18, 72))
 
         ax.scatter(
@@ -200,22 +223,22 @@ class CourtShotSkill(BaseLegendSkill):
             edgecolors="#27292c",
             linewidths=0.35,
         )
-        ax.scatter(x[::8], y[::8], s=7, color="#f8d1cc", alpha=0.22)
+        ax.scatter(x[::8], y[::8], s=7, color="#f8d1cc", alpha=0.22)  # 稀疏装饰点
 
         line_color = "#e5ddd1"
-        for x_coord in [-220, 220]:
-            ax.plot([x_coord, x_coord], [0, 140], color=line_color, lw=1.0, alpha=0.38)
-        ax.plot([-220, -82], [140, 188], color=line_color, lw=0.9, alpha=0.38)
-        ax.plot([220, 82], [140, 188], color=line_color, lw=0.9, alpha=0.38)
-        ax.plot([-80, -80], [0, 190], color=line_color, lw=0.9, alpha=0.42)
-        ax.plot([80, 80], [0, 190], color=line_color, lw=0.9, alpha=0.42)
+        for x_coord in [-CORNER_3_X, CORNER_3_X]:
+            ax.plot([x_coord, x_coord], [0, int(8.5 * 10)], color=line_color, lw=1.0, alpha=0.38)  # 底角三分线边界
+        ax.plot([-CORNER_3_X, -PAINT_HALF_WIDTH * 1.5], [int(8.5 * 10), FT_LINE_Y - 2], color=line_color, lw=0.9, alpha=0.38)   # 左侧斜线
+        ax.plot([CORNER_3_X, PAINT_HALF_WIDTH * 1.5], [int(8.5 * 10), FT_LINE_Y - 2], color=line_color, lw=0.9, alpha=0.38)     # 右侧斜线
+        ax.plot([-80, -80], [0, FT_LINE_Y], color=line_color, lw=0.9, alpha=0.42)      # 左禁区线
+        ax.plot([80, 80], [0, FT_LINE_Y], color=line_color, lw=0.9, alpha=0.42)        # 右禁区线
 
         labels = [
-            ("LEFT\n51%", -170, 118, "#d94156"),
-            ("RIM\n60%", 0, 78, "#f3b9b1"),
-            ("RIGHT\n42%", 170, 118, "#85c8e5"),
-            ("ARC\n40%", 0, 255, "#b55f6c"),
-            ("CORNER\n31%", -208, 48, "#b1d6e8"),
+            ("LEFT\n51%", -160, 100, "#d94156"),
+            ("RIM\n60%", 0, BASKET_Y + 35, "#f3b9b1"),
+            ("RIGHT\n42%", 160, 100, "#85c8e5"),
+            ("ARC\n40%", 0, BASKET_Y + THREE_PT_ARC_RADIUS - 15, "#b55f6c"),
+            ("CORNER\n31%", -210, 50, "#b1d6e8"),
         ]
         for label, px, py, color in labels:
             ax.text(
@@ -236,9 +259,10 @@ class CourtShotSkill(BaseLegendSkill):
             )
 
     def _render_points_location(self, request: RenderRequest, width: int, height: int) -> bytes:
+        """渲染位置得分六边形热力图（points_location 样式）：用 hexbin 展示各位置的累计得分。"""
         fig = create_figure(width, height, "#111b27")
         canvas = add_canvas(fig)
-        self._draw_texture(canvas, "#243242", alpha=0.12)
+        self._draw_texture(canvas, "#243242", alpha=0.12)       # 绘制背景纹理
         canvas.text(
             0.5,
             0.92,
@@ -264,9 +288,9 @@ class CourtShotSkill(BaseLegendSkill):
             points_x,
             points_y,
             C=values,
-            reduce_C_function=np.sum,
-            gridsize=33,
-            extent=(-250, 250, 0, 470),
+            reduce_C_function=np.sum,                          # 六边形内求和聚合
+            gridsize=33,                                       # 六边形网格密度
+            extent=(-250, 250, 0, 470),                        # 数据范围
             mincnt=1,
             cmap=make_gradient(
                 ["#06343e", "#0a6b68", "#12a99b", "#35e5d7", "#d7fff8"],
@@ -283,7 +307,7 @@ class CourtShotSkill(BaseLegendSkill):
         else:
             totals = np.asarray(totals)
         if totals.size > 0:
-            dynamic_max = max(float(np.percentile(totals, 96)), 800.0)
+            dynamic_max = max(float(np.percentile(totals, 96)), 800.0)  # 动态最大值：取96分位数
             hex_map.set_clim(0, dynamic_max)
         ax.scatter(points_x[::8], points_y[::8], s=10, color="#8ffcf2", alpha=0.10, lw=0)
 
@@ -292,7 +316,7 @@ class CourtShotSkill(BaseLegendSkill):
         legend_colors = ["#06343e", "#0a6b68", "#12a99b", "#35e5d7", "#d7fff8"]
         for index, (label, color) in enumerate(zip(labels, legend_colors, strict=True)):
             x0 = 0.39 + index * 0.055
-            canvas.scatter([x0], [0.052], marker="h", s=1600, color=color, edgecolor="#2bd4c3")
+            canvas.scatter([x0], [0.052], marker="h", s=1600, color=color, edgecolor="#2bd4c3")  # 图例六边形色块
             text_color = "#0d2530" if index == len(labels) - 1 else "#f6ffff"
             canvas.text(
                 x0,
@@ -318,6 +342,7 @@ class CourtShotSkill(BaseLegendSkill):
         return save_png(fig)
 
     def _render_kobe_shots(self, request: RenderRequest, width: int, height: int) -> bytes:
+        """渲染科比投篮图表（kobe_shots 样式）：白底篮球标记展示命中/未中/助攻。"""
         fig = create_figure(width, height, "#ffffff")
         canvas = add_canvas(fig)
         canvas.text(
@@ -340,10 +365,10 @@ class CourtShotSkill(BaseLegendSkill):
 
         ax = fig.add_axes([0.03, 0.08, 0.94, 0.68], facecolor="#ffffff")
         draw_half_court(ax, line_color="#111111", line_width=1.25, alpha=0.98)
-        made, missed, assisted = self._kobe_shot_data()
-        self._draw_basketball_markers(ax, missed[:, 0], missed[:, 1], "#ffffff", 230)
-        self._draw_basketball_markers(ax, made[:, 0], made[:, 1], "#e57f48", 230)
-        self._draw_basketball_markers(ax, assisted[:, 0], assisted[:, 1], "#14b85d", 250)
+        made, missed, assisted = self._kobe_shot_data()        # 获取命中/未中/助攻三组坐标
+        self._draw_basketball_markers(ax, missed[:, 0], missed[:, 1], "#ffffff", 230)  # 未中：白色
+        self._draw_basketball_markers(ax, made[:, 0], made[:, 1], "#e57f48", 230)       # 命中：橙色
+        self._draw_basketball_markers(ax, assisted[:, 0], assisted[:, 1], "#14b85d", 250)  # 助攻：绿色
 
         legend = [("Made Shots", "#e57f48"), ("Missed Shots", "#ffffff"), ("Assisted Shots", "#14b85d")]
         for index, (label, color) in enumerate(legend):
@@ -354,6 +379,7 @@ class CourtShotSkill(BaseLegendSkill):
 
     @staticmethod
     def _points_location_data(data: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """解析位置得分数据：优先使用原始投篮列表，否则按区域配置生成模拟数据。"""
         raw_shots = data.get("shots")
         if isinstance(raw_shots, list) and raw_shots:
             x = np.array([float(shot["x"]) for shot in raw_shots], dtype=float)
@@ -374,15 +400,15 @@ class CourtShotSkill(BaseLegendSkill):
                 continue
             count = int(zone.get("count", 100))
             points_per_event = float(zone.get("points_per_event", 6.0))
-            jitter = float(zone.get("point_jitter", 0.18))
+            jitter = float(zone.get("point_jitter", 0.18))     # 得分值的随机抖动幅度
             if zone.get("shape") == "arc":
                 angle_min, angle_max = zone.get("angle_range", [24, 156])
                 angles = rng.uniform(np.deg2rad(angle_min), np.deg2rad(angle_max), count)
-                radius = rng.normal(float(zone.get("radius", 235)), float(zone.get("radius_sd", 12)), count)
+                radius = rng.normal(float(zone.get("radius", THREE_PT_ARC_RADIUS)), float(zone.get("radius_sd", 12)), count)
                 xs = radius * np.cos(angles)
-                ys = 52.5 + radius * np.sin(angles)
+                ys = BASKET_Y + radius * np.sin(angles)             # 以篮筐为中心的极坐标转换
             else:
-                center_x, center_y = zone.get("center", [0, 52.5])
+                center_x, center_y = zone.get("center", [0, BASKET_Y + 20])
                 spread_x, spread_y = zone.get("spread", [30, 30])
                 xs = rng.normal(float(center_x), float(spread_x), count)
                 ys = rng.normal(float(center_y), float(spread_y), count)
@@ -395,17 +421,18 @@ class CourtShotSkill(BaseLegendSkill):
 
     @staticmethod
     def _default_points_location_zones() -> list[dict]:
+        """默认的区域得分配置：定义篮下、油漆区、三分线、底角、中距离等区域的参数。"""
         return [
             {
                 "name": "rim",
-                "center": [0, 58],
+                "center": [0, BASKET_Y + 22],      # 篮筐正上方
                 "spread": [36, 28],
                 "count": 900,
                 "points_per_event": 8.8,
             },
             {
                 "name": "paint",
-                "center": [0, 142],
+                "center": [0, FT_LINE_Y - 48],     # 禁区内 (罚球线前方)
                 "spread": [24, 56],
                 "count": 430,
                 "points_per_event": 6.2,
@@ -414,28 +441,28 @@ class CourtShotSkill(BaseLegendSkill):
                 "name": "above_break_three",
                 "shape": "arc",
                 "angle_range": [25, 155],
-                "radius": 235,
+                "radius": THREE_PT_ARC_RADIUS,    # 三分线弧形半径
                 "radius_sd": 12,
                 "count": 760,
                 "points_per_event": 3.7,
             },
             {
                 "name": "left_corner",
-                "center": [-222, 96],
+                "center": [-CORNER_3_X + 10, int(5.0 * 10)],   # 左底角三分
                 "spread": [8, 42],
                 "count": 170,
                 "points_per_event": 3.2,
             },
             {
                 "name": "right_corner",
-                "center": [222, 96],
+                "center": [CORNER_3_X - 10, int(5.0 * 10)],    # 右底角三分
                 "spread": [8, 42],
                 "count": 170,
                 "points_per_event": 3.2,
             },
             {
                 "name": "short_midrange",
-                "center": [0, 215],
+                "center": [0, BASKET_Y + THREE_PT_ARC_RADIUS * 0.75],  # 中距离 (罚球线与三分之间)
                 "spread": [52, 28],
                 "count": 130,
                 "points_per_event": 2.4,
@@ -444,14 +471,15 @@ class CourtShotSkill(BaseLegendSkill):
 
     @staticmethod
     def _kobe_shot_data() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """生成科比风格投篮数据：命中点（含篮下聚集）、未中点、助攻点的坐标数组。"""
         rng = seeded_rng(81)
         made_x, made_y, _ = sample_shots(seed=81, count=32)
         missed_x, missed_y, _ = sample_shots(seed=24, count=24)
-        assisted = np.array([[-78, 78], [0, 382], [-60, 45]], dtype=float)
+        assisted = np.array([[-78, BASKET_Y + 38], [0, BASKET_Y + THREE_PT_ARC_RADIUS * 1.42], [-60, BASKET_Y + 5]], dtype=float)
         made = np.column_stack([made_x, made_y])
         missed = np.column_stack([missed_x, missed_y])
-        rim_cluster = np.column_stack([rng.normal(0, 32, 14), rng.normal(55, 26, 14)])
-        made = np.vstack([made[:22], rim_cluster])
+        rim_cluster = np.column_stack([rng.normal(0, 32, 14), rng.normal(BASKET_Y + 18, 26, 14)])  # 篮下密集聚集点
+        made = np.vstack([made[:22], rim_cluster])              # 合并常规命中点和篮下聚集点
         return made, missed, assisted
 
     @staticmethod
@@ -462,14 +490,16 @@ class CourtShotSkill(BaseLegendSkill):
         color: str,
         size: float,
     ) -> None:
+        """绘制篮球标记：圆形外框加内部十字线和圆环，模拟篮球外观。"""
         ax.scatter(x, y, s=size, color=color, edgecolor="#111111", linewidth=0.7, zorder=6)
         for xi, yi in zip(x, y, strict=True):
-            ax.plot([xi - 8, xi + 8], [yi, yi], color="#111111", lw=0.45, alpha=0.75, zorder=7)
-            ax.plot([xi, xi], [yi - 8, yi + 8], color="#111111", lw=0.45, alpha=0.75, zorder=7)
-            ax.add_patch(Circle((xi, yi), 6.0, fill=False, edgecolor="#111111", lw=0.35, alpha=0.70, zorder=7))
+            ax.plot([xi - 8, xi + 8], [yi, yi], color="#111111", lw=0.45, alpha=0.75, zorder=7)  # 水平缝线
+            ax.plot([xi, xi], [yi - 8, yi + 8], color="#111111", lw=0.45, alpha=0.75, zorder=7)  # 垂直缝线
+            ax.add_patch(Circle((xi, yi), 6.0, fill=False, edgecolor="#111111", lw=0.35, alpha=0.70, zorder=7))  # 内圆
 
     @staticmethod
     def _draw_texture(canvas: plt.Axes, color: str, alpha: float) -> None:
+        """绘制背景噪点纹理：随机散布小颗粒营造质感。"""
         rng = seeded_rng(44)
         x = rng.uniform(0, 1, 1800)
         y = rng.uniform(0, 1, 1800)

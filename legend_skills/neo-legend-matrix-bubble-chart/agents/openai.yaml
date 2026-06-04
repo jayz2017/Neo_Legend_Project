@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Correlation Bubble Matrix (Neo Legend 矩阵气泡图)"
+  short_description: "Tune `matrix_bubble_chart` chart styling and data rules. (调优 `matrix_bubble_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-matrix-bubble-chart to tune the Neo Legend `matrix_bubble_chart` renderer. (使用 $neo-legend-matrix-bubble-chart 来调优 Neo Legend `matrix_bubble_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true

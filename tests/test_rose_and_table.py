@@ -84,6 +84,12 @@ def test_scoreboard_dark_style_renders_valid_png(registry):
     assert image.format == "PNG"
 
 
+def test_scoreboard_dark_cell_text_uses_contrast_color():
+    assert TableSkill._cell_text_color("#a6efb7") == "#050505"
+    assert TableSkill._cell_text_color("#fff1b8") == "#050505"
+    assert TableSkill._cell_text_color("#4d3300") == "#ffffff"
+
+
 def test_table_styles_have_different_themes(registry):
     """测试亮色主题 vs 暗色主题输出不同"""
     light = registry.render(RenderRequest(legend_type="table", style="heatmap_light", width=720, height=900))

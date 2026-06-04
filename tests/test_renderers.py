@@ -35,13 +35,14 @@ def test_style_parameter_changes_render_variant(registry) -> None:
     assert zone.style == "zone"
 
 
-def test_all_14_legend_types_registered(registry):
+def test_all_20_legend_types_registered(registry):
     """验证全部 14 种 legend_type 均可渲染"""
     expected_types = [
         "court_shot", "dual_court_shot", "court_shot_animation",
         "coordinate", "plus_minus_coordinate", "rose", "table", "points_location",
-        "radar_chart", "dual_radar_chart", "bar_chart", "combo_chart",
-        "bubble_chart", "sankey_chart"
+        "radar_chart", "dual_radar_chart", "bar_chart", "line_chart", "combo_chart",
+        "bubble_chart", "sankey_chart", "calendar_chart", "matrix_bubble_chart",
+        "chord_chart", "scatter_matrix_chart", "stacked_bar_chart"
     ]
 
     registered = {t.legend_type for t in registry.list_types()}

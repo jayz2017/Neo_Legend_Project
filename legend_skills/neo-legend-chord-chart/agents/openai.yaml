@@ -1,0 +1,6 @@
+interface:
+  display_name: "Neo Legend Capital Flow Chord (Neo Legend 弦图)"
+  short_description: "Tune `chord_chart` chart styling and data rules. (调优 `chord_chart` 图表的样式和数据规则。)"
+default_prompt: "Use $neo-legend-chord-chart to tune the Neo Legend `chord_chart` renderer. (使用 $neo-legend-chord-chart 来调优 Neo Legend `chord_chart` 渲染器。)"
+policy:
+  allow_implicit_invocation: true
